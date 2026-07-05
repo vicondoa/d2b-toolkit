@@ -4,8 +4,8 @@ Shared Rust/Nix toolkit crates for d2b desktop integrations. The workspace is in
 
 ## Crates
 
-- `d2b-toolkit-core`: shared DTOs, redaction wrappers, hello shape, socket classification, shell owner messages.
-- `d2b-client`: runtime-agnostic framed client helpers over `futures::io::{AsyncRead, AsyncWrite}`.
+- `d2b-toolkit-core`: shared DTOs, redaction wrappers, daemon hello shape, socket classification, and public shell messages.
+- `d2b-client`: runtime-agnostic framed public-socket client helpers over `futures::io::{AsyncRead, AsyncWrite}`.
 - `d2b-wayland-core`: common Wayland/UI color types.
 - `d2b-wayland-colors`: d2b UI color artifact parsing and CSS variable helpers.
 - `d2b-wayland-waybar`: Waybar-facing module scaffolding.

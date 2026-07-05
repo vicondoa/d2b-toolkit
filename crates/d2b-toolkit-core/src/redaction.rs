@@ -1,5 +1,7 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::collections::hash_map::DefaultHasher;
 use std::fmt;
+use std::hash::{Hash, Hasher};
 
 pub const REDACTED: &str = "[redacted]";
 
@@ -40,6 +42,13 @@ pub struct CorrelationId(String);
 impl CorrelationId {
     pub fn from_non_reversible_digest(value: impl Into<String>) -> Self {
         Self(value.into())
+    }
+
+    pub fn from_opaque_handle(handle: &OpaqueHandle) -> Self {
+        let mut hasher = DefaultHasher::new();
+        "d2b-toolkit-opaque-handle".hash(&mut hasher);
+        handle.0.hash(&mut hasher);
+        Self(format!("{:016x}", hasher.finish()))
     }
 }
 
@@ -121,5 +130,13 @@ mod tests {
         let correlation = CorrelationId::from_non_reversible_digest("raw-session-handle-digest");
         assert!(!format!("{correlation:?}").contains("raw-session-handle-digest"));
         assert_eq!(correlation.to_string(), "<digest>");
+    }
+
+    #[test]
+    fn correlation_from_handle_does_not_expose_handle() {
+        let handle = OpaqueHandle::new("opaque-session-handle");
+        let correlation = CorrelationId::from_opaque_handle(&handle);
+        assert!(!format!("{correlation:?}").contains("opaque-session-handle"));
+        assert!(!correlation.0.contains("opaque-session-handle"));
     }
 }

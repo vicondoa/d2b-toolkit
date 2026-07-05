@@ -15,5 +15,8 @@ pub mod socket_policy;
 pub use error::ClientError;
 pub use frame::{read_frame, read_json_frame, write_frame, write_json_frame, FrameBounds};
 pub use hello::{read_hello_response, send_hello, validate_hello_response};
-pub use shell_owner::{ShellOwnerBoundary, ShellOwnerSink, ShellOwnerStream};
+pub use shell_owner::{
+    AttachedShell, AttachedShellBoundary, AttachedShellCommand, AttachedShellCommandSink,
+    AttachedShellEvent, AttachedShellEventStream, PublicSocketClient,
+};
 pub use socket_policy::ensure_allowed_socket;

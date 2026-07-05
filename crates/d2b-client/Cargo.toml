@@ -10,6 +10,7 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
+base64 = "0.22"
 d2b-toolkit-core.workspace = true
 futures.workspace = true
 serde.workspace = true
