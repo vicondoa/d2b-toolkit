@@ -2,7 +2,7 @@ use crate::ClientError;
 use futures::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use serde::{de::DeserializeOwned, Serialize};
 
-pub const DEFAULT_MAX_FRAME_LEN: usize = 64 * 1024;
+pub const DEFAULT_MAX_FRAME_LEN: usize = 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FrameBounds {
@@ -52,7 +52,7 @@ where
             context: "reading frame length",
             source,
         })?;
-    let len = u32::from_be_bytes(prefix) as usize;
+    let len = u32::from_le_bytes(prefix) as usize;
     bounds.check(len)?;
 
     let mut payload = vec![0_u8; len];
@@ -82,7 +82,7 @@ where
         }
     })?;
     writer
-        .write_all(&len.to_be_bytes())
+        .write_all(&len.to_le_bytes())
         .await
         .map_err(|source| d2b_toolkit_core::ToolkitError::Io {
             context: "writing frame length",
@@ -135,7 +135,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::{read_json_frame, write_json_frame, FrameBounds};
+    use super::{read_frame, read_json_frame, write_json_frame, FrameBounds};
     use futures::executor::block_on;
     use futures::io::Cursor;
     use serde::{Deserialize, Serialize};
@@ -182,6 +182,39 @@ mod tests {
             let debug = format!("{err:?}");
             assert!(debug.contains("FrameTooLarge"));
             assert!(transport.get_ref().is_empty());
+        });
+    }
+
+    #[test]
+    fn frame_length_prefix_is_little_endian() {
+        block_on(async {
+            let mut transport = Cursor::new(Vec::new());
+            write_json_frame(
+                &mut transport,
+                &Message {
+                    kind: "little".into(),
+                },
+                FrameBounds::new(128),
+            )
+            .await
+            .unwrap();
+            let bytes = transport.into_inner();
+            let declared = u32::from_le_bytes(bytes[..4].try_into().unwrap()) as usize;
+            assert_eq!(declared, bytes.len() - 4);
+        });
+    }
+
+    #[test]
+    fn read_rejects_oversize_declared_length_before_payload() {
+        block_on(async {
+            let mut bytes = Vec::new();
+            bytes.extend_from_slice(&9_u32.to_le_bytes());
+            bytes.extend_from_slice(b"short");
+            let mut transport = Cursor::new(bytes);
+            let err = read_frame(&mut transport, FrameBounds::new(8))
+                .await
+                .unwrap_err();
+            assert!(format!("{err:?}").contains("FrameTooLarge"));
         });
     }
 }

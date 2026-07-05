@@ -16,15 +16,26 @@ pub enum ClientError {
 
     #[error("hello negotiation failed: {reason}")]
     Hello { reason: &'static str },
+
+    #[error("daemon returned typed error: {kind}")]
+    Daemon { kind: String },
+
+    #[error("unexpected daemon response while {context}")]
+    UnexpectedResponse { context: &'static str },
+
+    #[error("daemon response correlation mismatch")]
+    CorrelationMismatch,
 }
 
 impl From<ClientError> for ToolkitError {
     fn from(value: ClientError) -> Self {
         match value {
             ClientError::Core(err) => err,
-            ClientError::Codec { .. } | ClientError::Hello { .. } => {
-                ToolkitError::Protocol { kind: "client" }
-            }
+            ClientError::Codec { .. }
+            | ClientError::Hello { .. }
+            | ClientError::Daemon { .. }
+            | ClientError::UnexpectedResponse { .. }
+            | ClientError::CorrelationMismatch => ToolkitError::Protocol { kind: "client" },
         }
     }
 }
@@ -48,5 +59,15 @@ mod tests {
         assert!(!debug.contains("opaque-session-handle"));
         assert!(!debug.contains("terminal bytes"));
         assert!(!debug.contains("SECRET_ENV"));
+    }
+
+    #[test]
+    fn daemon_error_does_not_include_message_or_remediation() {
+        let err = ClientError::Daemon {
+            kind: "guest-control-shell-stale-session".into(),
+        };
+        let rendered = err.to_string();
+        assert!(rendered.contains("guest-control-shell-stale-session"));
+        assert!(!rendered.contains("opaque-session-handle"));
     }
 }
