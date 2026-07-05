@@ -11,3 +11,11 @@ Shell routing uses the daemon shape directly: requests are `{"type":"shell","op"
 The toolkit uses byte read/write only for the public socket path. It does not use `recvmsg`, ancillary file descriptors, runtime timers, or task spawning in core client code.
 
 The privileged broker socket is not a client transport. Socket classification helpers fail closed with a typed refusal error and do not echo filesystem paths.
+
+## Packaging contract
+
+Flake consumers should depend on `d2b-toolkit.packages.${system}.default` and
+rewrite Cargo path dependencies to the packaged source tree under
+`share/d2b-toolkit/crates/`. The package includes the workspace lockfile and
+docs so downstream `nix flake check` runs can build against the exact toolkit
+revision selected by their flake lock.
