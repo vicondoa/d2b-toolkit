@@ -6,9 +6,10 @@ Shared Rust/Nix toolkit crates for d2b desktop integrations. The workspace is in
 
 - `d2b-toolkit-core`: shared DTOs, redaction wrappers, hello shape, socket classification, shell owner messages.
 - `d2b-client`: runtime-agnostic framed client helpers over `futures::io::{AsyncRead, AsyncWrite}`.
-- `d2b-wayland-core`: common Wayland/UI color types.
-- `d2b-wayland-colors`: d2b UI color artifact parsing and CSS variable helpers.
-- `d2b-wayland-waybar`: Waybar-facing module scaffolding.
+- `d2b-wayland-core`: safe Wayland client metadata DTOs and UI color types.
+- `d2b-wayland-colors`: d2b UI color artifact parsing, fallback reporting, and CSS variable helpers.
+- `d2b-wayland-waybar`: Waybar custom-module serialization helpers.
+- `d2b-wayland-proxy`: Unix-only ancillary FD transport trait seams for proxy integrations.
 
 ## Development
 
@@ -18,4 +19,4 @@ cargo test --workspace
 nix flake check
 ```
 
-The client crate does not open sockets directly. Runtime integrations must pass concrete transports implementing the futures async I/O traits and must use the public daemon socket, never the privileged broker socket.
+The client crate does not open sockets directly. Runtime integrations must pass concrete transports implementing the futures async I/O traits and must use the public daemon socket, never the privileged broker socket. Wayland FD passing stays isolated in `d2b-wayland-proxy`; shared client crates only model safe metadata and presentation data.
