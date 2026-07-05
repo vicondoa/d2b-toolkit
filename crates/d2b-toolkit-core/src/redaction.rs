@@ -1,7 +1,6 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::collections::hash_map::DefaultHasher;
+use sha2::{Digest, Sha256};
 use std::fmt;
-use std::hash::{Hash, Hasher};
 
 pub const REDACTED: &str = "[redacted]";
 
@@ -45,10 +44,11 @@ impl CorrelationId {
     }
 
     pub fn from_opaque_handle(handle: &OpaqueHandle) -> Self {
-        let mut hasher = DefaultHasher::new();
-        "d2b-toolkit-opaque-handle".hash(&mut hasher);
-        handle.0.hash(&mut hasher);
-        Self(format!("{:016x}", hasher.finish()))
+        let mut hasher = Sha256::new();
+        hasher.update(b"d2b-toolkit-opaque-handle");
+        hasher.update((handle.0.len() as u64).to_le_bytes());
+        hasher.update(handle.0.as_bytes());
+        Self(format!("{:x}", hasher.finalize()))
     }
 }
 
@@ -138,5 +138,9 @@ mod tests {
         let correlation = CorrelationId::from_opaque_handle(&handle);
         assert!(!format!("{correlation:?}").contains("opaque-session-handle"));
         assert!(!correlation.0.contains("opaque-session-handle"));
+        assert_eq!(
+            correlation.0,
+            "91bea23db6d9740daac4180413d64b5200a5d0eb15381534a70a80c813094cdf"
+        );
     }
 }
