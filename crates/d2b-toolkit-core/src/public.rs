@@ -67,10 +67,12 @@ impl PublicResponse {
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct ShellRequestFrame {
-    kind: PublicRequestType,
+    #[serde(rename = "type")]
+    type_name: PublicRequestType,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     op_id: Option<u64>,
-    payload: ShellOp,
+    #[serde(flatten)]
+    op: ShellOp,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -114,9 +116,9 @@ impl Serialize for PublicRequest {
     {
         match self {
             Self::Shell { op_id, op } => ShellRequestFrame {
-                kind: PublicRequestType::Shell,
+                type_name: PublicRequestType::Shell,
                 op_id: *op_id,
-                payload: op.clone(),
+                op: op.clone(),
             }
             .serialize(serializer),
         }
@@ -131,7 +133,7 @@ impl<'de> Deserialize<'de> for PublicRequest {
         let frame = ShellRequestFrame::deserialize(deserializer)?;
         Ok(Self::Shell {
             op_id: frame.op_id,
-            op: frame.payload,
+            op: frame.op,
         })
     }
 }

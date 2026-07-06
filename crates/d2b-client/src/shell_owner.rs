@@ -533,9 +533,9 @@ mod tests {
 
             let transport = client.into_inner();
             let frames = transport.written_json_frames();
-            assert_eq!(frames[0]["kind"], "shell");
-            assert_eq!(frames[0]["payload"]["op"], "list");
-            assert_eq!(frames[0]["payload"]["args"]["vm"], "corp-vm");
+            assert_eq!(frames[0]["type"], "shell");
+            assert_eq!(frames[0]["op"], "list");
+            assert_eq!(frames[0]["args"]["vm"], "corp-vm");
             assert_eq!(frames[0]["opId"], 1);
         });
     }
@@ -623,18 +623,15 @@ mod tests {
             assert!(detach.detached);
 
             let frames = client.into_inner().written_json_frames();
-            assert_eq!(frames[0]["payload"]["op"], "attach");
-            assert!(frames[0]["payload"]["args"].get("session").is_none());
-            assert_eq!(frames[1]["payload"]["op"], "writeStdin");
-            assert_eq!(
-                frames[1]["payload"]["args"]["session"],
-                "opaque-session-handle"
-            );
-            assert_eq!(frames[1]["payload"]["args"]["chunkBase64"], "aGVsbG8=");
-            assert_eq!(frames[2]["payload"]["op"], "readOutput");
-            assert_eq!(frames[2]["payload"]["args"]["offset"], 0);
-            assert_eq!(frames[3]["payload"]["op"], "resize");
-            assert_eq!(frames[4]["payload"]["op"], "closeAttach");
+            assert_eq!(frames[0]["op"], "attach");
+            assert!(frames[0]["args"].get("session").is_none());
+            assert_eq!(frames[1]["op"], "writeStdin");
+            assert_eq!(frames[1]["args"]["session"], "opaque-session-handle");
+            assert_eq!(frames[1]["args"]["chunkBase64"], "aGVsbG8=");
+            assert_eq!(frames[2]["op"], "readOutput");
+            assert_eq!(frames[2]["args"]["offset"], 0);
+            assert_eq!(frames[3]["op"], "resize");
+            assert_eq!(frames[4]["op"], "closeAttach");
         });
     }
 
