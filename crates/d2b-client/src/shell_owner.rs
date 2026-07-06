@@ -388,11 +388,16 @@ fn shell_response_for_op(
     expected_op_id: u64,
 ) -> Result<ShellOpResponse, ClientError> {
     match response {
-        PublicResponse::Shell { op_id, response } if op_id == Some(expected_op_id) => Ok(response),
+        PublicResponse::Shell { op_id, response }
+            if op_id.is_none() || op_id == Some(expected_op_id) =>
+        {
+            Ok(response)
+        }
         PublicResponse::Shell { .. } => Err(ClientError::CorrelationMismatch),
         PublicResponse::Error { op_id, error } if op_id == Some(expected_op_id) => {
             daemon_error(error)
         }
+        PublicResponse::Error { op_id: None, error } => daemon_error(error),
         PublicResponse::Error { .. } => Err(ClientError::CorrelationMismatch),
     }
 }
@@ -532,6 +537,23 @@ mod tests {
             assert_eq!(frames[0]["payload"]["op"], "list");
             assert_eq!(frames[0]["payload"]["args"]["vm"], "corp-vm");
             assert_eq!(frames[0]["opId"], 1);
+        });
+    }
+
+    #[test]
+    fn shell_list_accepts_stateless_response_without_op_id() {
+        block_on(async {
+            let response = PublicResponse::Shell {
+                op_id: None,
+                response: ShellOpResponse::List(ShellListResult {
+                    default_name: ShellName::new("default"),
+                    sessions: vec![],
+                }),
+            };
+            let mut client =
+                PublicSocketClient::new(FakePublicSocket::with_responses(vec![response]));
+            let result = client.shell_list("corp-vm").await.unwrap();
+            assert!(result.sessions.is_empty());
         });
     }
 
