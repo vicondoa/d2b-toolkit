@@ -1,12 +1,13 @@
 use crate::{read_json_frame, write_json_frame, ClientError, FrameBounds};
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use d2b_toolkit_core::{
-    CorrelationId, ErrorEnvelope, OpaqueHandle, PublicRequest, PublicResponse, Redacted,
-    ShellAttachArgs, ShellAttachResult, ShellCloseAttachArgs, ShellDetachArgs, ShellDetachResult,
-    ShellKillArgs, ShellKillResult, ShellListArgs, ShellListResult, ShellName, ShellOp,
-    ShellOpResponse, TerminalClose, TerminalCloseResult, TerminalControlResult, TerminalReadOutput,
-    TerminalReadOutputChunk, TerminalResize, TerminalSize, TerminalStream, TerminalWait,
-    TerminalWaitResult, TerminalWriteStdin, TerminalWriteStdinResult,
+    CorrelationId, ErrorEnvelope, HelloOk, KnownFeatureFlag, NegotiatedCapabilities, OpaqueHandle,
+    PublicRequest, PublicResponse, Redacted, ShellAttachArgs, ShellAttachResult,
+    ShellCloseAttachArgs, ShellDetachArgs, ShellDetachResult, ShellKillArgs, ShellKillResult,
+    ShellListArgs, ShellListResult, ShellName, ShellOp, ShellOpResponse, TerminalClose,
+    TerminalCloseResult, TerminalControlResult, TerminalReadOutput, TerminalReadOutputChunk,
+    TerminalResize, TerminalSize, TerminalStream, TerminalWait, TerminalWaitResult,
+    TerminalWriteStdin, TerminalWriteStdinResult,
 };
 use futures::io::{AsyncRead, AsyncWrite};
 use futures::{Sink, Stream};
@@ -97,9 +98,11 @@ pub enum AttachedShellEvent {
 }
 
 pub struct PublicSocketClient<T> {
-    transport: T,
-    bounds: FrameBounds,
-    next_op_id: u64,
+    pub(crate) transport: T,
+    pub(crate) bounds: FrameBounds,
+    pub(crate) next_op_id: u64,
+    pub(crate) negotiated_capabilities: Option<NegotiatedCapabilities>,
+    require_unsafe_local_shell: bool,
 }
 
 impl<T> PublicSocketClient<T>
@@ -115,7 +118,53 @@ where
             transport,
             bounds,
             next_op_id: 1,
+            negotiated_capabilities: None,
+            require_unsafe_local_shell: false,
         }
+    }
+
+    pub fn with_negotiated_capabilities(
+        transport: T,
+        capabilities: NegotiatedCapabilities,
+    ) -> Self {
+        Self::with_bounds_and_negotiated_capabilities(
+            transport,
+            FrameBounds::default(),
+            capabilities,
+        )
+    }
+
+    pub fn with_bounds_and_negotiated_capabilities(
+        transport: T,
+        bounds: FrameBounds,
+        capabilities: NegotiatedCapabilities,
+    ) -> Self {
+        Self {
+            transport,
+            bounds,
+            next_op_id: 1,
+            negotiated_capabilities: Some(capabilities),
+            require_unsafe_local_shell: false,
+        }
+    }
+
+    pub fn with_hello_ok(transport: T, hello: &HelloOk) -> Self {
+        Self::with_negotiated_capabilities(transport, hello.negotiated_capabilities())
+    }
+
+    pub fn negotiated_capabilities(&self) -> Option<&NegotiatedCapabilities> {
+        self.negotiated_capabilities.as_ref()
+    }
+
+    pub fn require_unsafe_local_shell(&mut self) -> Result<(), ClientError> {
+        self.require_feature(KnownFeatureFlag::UnsafeLocalShellV1)?;
+        self.require_unsafe_local_shell = true;
+        Ok(())
+    }
+
+    pub fn requiring_unsafe_local_shell(mut self) -> Result<Self, ClientError> {
+        self.require_unsafe_local_shell()?;
+        Ok(self)
     }
 
     pub fn into_inner(self) -> T {
@@ -124,10 +173,11 @@ where
 
     pub async fn shell_list(
         &mut self,
-        vm: impl Into<String>,
+        target: impl Into<String>,
     ) -> Result<ShellListResult, ClientError> {
+        let target = checked_shell_target(target.into())?;
         let response = self
-            .round_trip(ShellOp::List(ShellListArgs { vm: vm.into() }))
+            .round_trip(ShellOp::List(ShellListArgs { vm: target }))
             .await?;
         match response {
             ShellOpResponse::List(result) => Ok(result),
@@ -139,14 +189,15 @@ where
 
     pub async fn attach_shell(
         mut self,
-        vm: impl Into<String>,
+        target: impl Into<String>,
         name: Option<ShellName>,
         force: bool,
         size: TerminalSize,
     ) -> Result<AttachedShell<T>, ClientError> {
+        let target = checked_shell_target(target.into())?;
         let response = self
             .round_trip(ShellOp::Attach(ShellAttachArgs {
-                vm: vm.into(),
+                vm: target,
                 name,
                 force,
                 initial_terminal_size: size,
@@ -162,14 +213,12 @@ where
 
     pub async fn shell_detach(
         &mut self,
-        vm: impl Into<String>,
+        target: impl Into<String>,
         name: Option<ShellName>,
     ) -> Result<ShellDetachResult, ClientError> {
+        let target = checked_shell_target(target.into())?;
         let response = self
-            .round_trip(ShellOp::Detach(ShellDetachArgs {
-                vm: vm.into(),
-                name,
-            }))
+            .round_trip(ShellOp::Detach(ShellDetachArgs { vm: target, name }))
             .await?;
         match response {
             ShellOpResponse::Detach(result) => Ok(result),
@@ -181,14 +230,12 @@ where
 
     pub async fn shell_kill(
         &mut self,
-        vm: impl Into<String>,
+        target: impl Into<String>,
         name: ShellName,
     ) -> Result<ShellKillResult, ClientError> {
+        let target = checked_shell_target(target.into())?;
         let response = self
-            .round_trip(ShellOp::Kill(ShellKillArgs {
-                vm: vm.into(),
-                name,
-            }))
+            .round_trip(ShellOp::Kill(ShellKillArgs { vm: target, name }))
             .await?;
         match response {
             ShellOpResponse::Kill(result) => Ok(result),
@@ -199,6 +246,7 @@ where
     }
 
     async fn round_trip(&mut self, op: ShellOp) -> Result<ShellOpResponse, ClientError> {
+        self.preflight_shell_features()?;
         let op_id = self.reserve_op_id();
         let request = PublicRequest::shell(Some(op_id), op);
         write_json_frame(&mut self.transport, &request, self.bounds).await?;
@@ -206,11 +254,30 @@ where
         shell_response_for_op(response, op_id)
     }
 
-    fn reserve_op_id(&mut self) -> u64 {
+    pub(crate) fn reserve_op_id(&mut self) -> u64 {
         let op_id = self.next_op_id;
         self.next_op_id = self.next_op_id.saturating_add(1);
         op_id
     }
+
+    fn preflight_shell_features(&self) -> Result<(), ClientError> {
+        if self.require_unsafe_local_shell {
+            self.require_feature(KnownFeatureFlag::UnsafeLocalShellV1)?;
+        }
+        Ok(())
+    }
+
+    pub(crate) fn require_feature(&self, feature: KnownFeatureFlag) -> Result<(), ClientError> {
+        match self.negotiated_capabilities.as_ref() {
+            Some(capabilities) => capabilities.require(feature).map_err(ClientError::from),
+            None => Err(d2b_toolkit_core::ToolkitError::FeatureUnavailable { feature }.into()),
+        }
+    }
+}
+
+fn checked_shell_target(target: String) -> Result<String, ClientError> {
+    d2b_toolkit_core::workload::validate_shell_target(&target)?;
+    Ok(target)
 }
 
 pub struct AttachedShell<T> {
@@ -399,11 +466,14 @@ fn shell_response_for_op(
         }
         PublicResponse::Error { op_id: None, error } => daemon_error(error),
         PublicResponse::Error { .. } => Err(ClientError::CorrelationMismatch),
+        PublicResponse::Workload { .. } => Err(ClientError::UnexpectedResponse {
+            context: "decoding shell response type",
+        }),
     }
 }
 
 fn daemon_error(error: ErrorEnvelope) -> Result<ShellOpResponse, ClientError> {
-    Err(ClientError::Daemon { kind: error.kind })
+    Err(ClientError::daemon_kind(error.kind))
 }
 
 #[cfg(test)]
@@ -512,9 +582,9 @@ mod tests {
         PublicResponse::Shell {
             op_id: Some(op_id),
             response: ShellOpResponse::List(ShellListResult {
-                default_name: ShellName::new("default"),
+                default_name: ShellName::new("default").unwrap(),
                 sessions: vec![d2b_toolkit_core::ShellListEntry {
-                    name: ShellName::new("customer-project"),
+                    name: ShellName::new("customer-project").unwrap(),
                     state: d2b_toolkit_core::ShellSessionState::Detached,
                     attached: false,
                     is_default: true,
@@ -546,7 +616,7 @@ mod tests {
             let response = PublicResponse::Shell {
                 op_id: None,
                 response: ShellOpResponse::List(ShellListResult {
-                    default_name: ShellName::new("default"),
+                    default_name: ShellName::new("default").unwrap(),
                     sessions: vec![],
                 }),
             };
@@ -565,7 +635,7 @@ mod tests {
                     op_id: Some(1),
                     response: ShellOpResponse::Attach(ShellAttachResult {
                         session: OpaqueHandle::new("opaque-session-handle"),
-                        resolved_name: ShellName::new("default"),
+                        resolved_name: ShellName::new("default").unwrap(),
                         state: d2b_toolkit_core::ShellSessionState::Attached,
                         force_evicted: false,
                     }),
@@ -597,7 +667,7 @@ mod tests {
                 PublicResponse::Shell {
                     op_id: Some(5),
                     response: ShellOpResponse::CloseAttach(ShellDetachResult {
-                        resolved_name: ShellName::new("default"),
+                        resolved_name: ShellName::new("default").unwrap(),
                         detached: true,
                         cause: None,
                     }),
@@ -660,7 +730,7 @@ mod tests {
                     op_id: Some(1),
                     response: ShellOpResponse::Attach(ShellAttachResult {
                         session: OpaqueHandle::new("opaque-session-handle"),
-                        resolved_name: ShellName::new("default"),
+                        resolved_name: ShellName::new("default").unwrap(),
                         state: d2b_toolkit_core::ShellSessionState::Attached,
                         force_evicted: false,
                     }),
@@ -691,7 +761,7 @@ mod tests {
                     op_id: Some(1),
                     response: ShellOpResponse::Attach(ShellAttachResult {
                         session: OpaqueHandle::new("opaque-session-handle"),
-                        resolved_name: ShellName::new("default"),
+                        resolved_name: ShellName::new("default").unwrap(),
                         state: d2b_toolkit_core::ShellSessionState::Attached,
                         force_evicted: false,
                     }),
@@ -730,7 +800,9 @@ mod tests {
         };
         assert_eq!(command.metrics_label_value(), "resize");
         assert_eq!(
-            ShellName::new("customer-project").metrics_label_value(),
+            ShellName::new("customer-project")
+                .unwrap()
+                .metrics_label_value(),
             "shell"
         );
         let error = ErrorEnvelope {
@@ -739,6 +811,6 @@ mod tests {
             message: "message".into(),
             remediation: "retry".into(),
         };
-        assert_eq!(error.metrics_label_value(), "guest-control-shell-timeout");
+        assert_eq!(error.metrics_label_value(), "daemon-error");
     }
 }

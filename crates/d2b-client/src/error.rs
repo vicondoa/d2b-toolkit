@@ -27,6 +27,23 @@ pub enum ClientError {
     CorrelationMismatch,
 }
 
+impl ClientError {
+    pub(crate) fn daemon_kind(kind: String) -> Self {
+        let valid = !kind.is_empty()
+            && kind.len() <= 128
+            && kind
+                .bytes()
+                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-');
+        Self::Daemon {
+            kind: if valid {
+                kind
+            } else {
+                "invalid-daemon-error".to_owned()
+            },
+        }
+    }
+}
+
 impl From<ClientError> for ToolkitError {
     fn from(value: ClientError) -> Self {
         match value {

@@ -1,0 +1,87 @@
+{
+  "providerKinds": [
+    "local-vm",
+    "qemu-media",
+    "provider-managed",
+    "unsafe-local"
+  ],
+  "isolationPostures": [
+    "virtual-machine",
+    "provider-managed",
+    "unsafe-local"
+  ],
+  "environmentPostures": [
+    "runtime-managed",
+    "systemd-user-manager-ambient"
+  ],
+  "displayEnvironmentPostures": [
+    "runtime-managed",
+    "wayland-proxy-only",
+    "not-applicable"
+  ],
+  "executionIdentityPostures": [
+    "workload-user",
+    "provider-managed",
+    "authenticated-requester-uid"
+  ],
+  "sessionPersistencePostures": [
+    "runtime-managed",
+    "user-manager-lifetime"
+  ],
+  "availability": [
+    "ready",
+    "helper-unavailable",
+    "helper-stale",
+    "user-manager-unavailable",
+    "graphical-session-inactive",
+    "wayland-unavailable",
+    "proxy-unavailable",
+    "degraded"
+  ],
+  "graphicalLaunchPostures": [
+    "proxied",
+    "not-applicable",
+    "graphical-session-inactive",
+    "wayland-unavailable",
+    "proxy-unavailable"
+  ],
+  "workloadStates": [
+    "stopped",
+    "starting",
+    "running",
+    "stopping",
+    "failed"
+  ],
+  "launcherItemKinds": [
+    "exec",
+    "shell"
+  ],
+  "launcherExecDispositions": [
+    "committed",
+    "already-committed"
+  ],
+  "knownCapabilities": [
+    "audio-capture",
+    "audio-playback",
+    "clipboard",
+    "configured-launch",
+    "display-streaming",
+    "ephemeral-sessions",
+    "exec",
+    "file-copy",
+    "gpu-accel",
+    "hid",
+    "hotplug",
+    "lifecycle",
+    "logs",
+    "persistent-shell",
+    "port-forward",
+    "provider-managed-isolation",
+    "pty",
+    "snapshots",
+    "usb",
+    "virtiofs",
+    "vsock",
+    "window-forwarding"
+  ]
+}

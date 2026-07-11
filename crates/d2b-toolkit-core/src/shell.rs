@@ -1,14 +1,19 @@
 use crate::redaction::{OpaqueHandle, SensitiveString};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::fmt;
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 #[serde(transparent)]
 pub struct ShellName(String);
 
 impl ShellName {
-    pub fn new(value: impl Into<String>) -> Self {
-        Self(value.into())
+    pub fn new(value: impl Into<String>) -> Result<Self, ShellNameError> {
+        let value = value.into();
+        if shell_name_valid(&value) {
+            Ok(Self(value))
+        } else {
+            Err(ShellNameError)
+        }
     }
 
     pub fn as_str(&self) -> &str {
@@ -24,6 +29,46 @@ impl fmt::Debug for ShellName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_tuple("ShellName").field(&"[redacted]").finish()
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ShellNameError;
+
+impl fmt::Display for ShellNameError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("shell name has an invalid shape")
+    }
+}
+
+impl std::error::Error for ShellNameError {}
+
+impl<'de> Deserialize<'de> for ShellName {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Self::new(String::deserialize(deserializer)?)
+            .map_err(|_| serde::de::Error::custom("shell name has an invalid shape"))
+    }
+}
+
+fn shell_name_valid(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    !bytes.is_empty()
+        && bytes.len() <= 64
+        && (bytes[0].is_ascii_alphanumeric() || bytes[0] == b'_')
+        && bytes[1..]
+            .iter()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+}
+
+fn deserialize_shell_target<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = String::deserialize(deserializer)?;
+    crate::workload::validate_shell_target(&value).map_err(serde::de::Error::custom)?;
+    Ok(value)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -221,6 +266,7 @@ pub struct TerminalCloseResult {
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ShellAttachArgs {
+    #[serde(deserialize_with = "deserialize_shell_target")]
     pub vm: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<ShellName>,
@@ -243,12 +289,14 @@ impl fmt::Debug for ShellAttachArgs {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ShellListArgs {
+    #[serde(deserialize_with = "deserialize_shell_target")]
     pub vm: String,
 }
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ShellDetachArgs {
+    #[serde(deserialize_with = "deserialize_shell_target")]
     pub vm: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<ShellName>,
@@ -266,6 +314,7 @@ impl fmt::Debug for ShellDetachArgs {
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ShellKillArgs {
+    #[serde(deserialize_with = "deserialize_shell_target")]
     pub vm: String,
     pub name: ShellName,
 }
@@ -466,7 +515,7 @@ mod tests {
     fn shell_debug_redacts_process_boundary_payloads() {
         let op = ShellOp::Attach(super::ShellAttachArgs {
             vm: "work".to_string(),
-            name: Some(ShellName::new("project-shell")),
+            name: Some(ShellName::new("project-shell").unwrap()),
             force: false,
             initial_terminal_size: super::TerminalSize { rows: 24, cols: 80 },
         });
@@ -478,7 +527,7 @@ mod tests {
 
     #[test]
     fn shell_name_is_not_metric_label() {
-        let shell = ShellName::new("customer-specific-shell");
+        let shell = ShellName::new("customer-specific-shell").unwrap();
         assert_eq!(shell.metrics_label_value(), "shell");
         assert_eq!(TerminalStream::Stdout.metrics_label_value(), "stdout");
     }

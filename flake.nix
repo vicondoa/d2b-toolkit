@@ -12,7 +12,7 @@
       packages = forAllSystems (pkgs: {
         default = pkgs.stdenvNoCC.mkDerivation {
           pname = "d2b-toolkit-source";
-          version = "0.1.0";
+          version = "0.2.0";
           src = pkgs.lib.cleanSource ./.;
           installPhase = ''
             runHook preInstall
@@ -26,7 +26,7 @@
       checks = forAllSystems (pkgs: {
         rust-workspace = pkgs.rustPlatform.buildRustPackage {
           pname = "d2b-toolkit-workspace-check";
-          version = "0.1.0";
+          version = "0.2.0";
           src = pkgs.lib.cleanSource ./.;
           cargoLock.lockFile = ./Cargo.lock;
           cargoBuildFlags = [ "--workspace" ];
