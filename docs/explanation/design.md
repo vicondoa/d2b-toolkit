@@ -37,8 +37,9 @@ daemon owns helper and broker interaction. Toolkit crates neither connect to
 nor model the private helper protocol or privileged broker protocol.
 
 Redaction is part of the type model. Opaque session and operation identifiers
-are serializable for wire use but hidden from diagnostics. Presentation fields
-are bounded, and metric labels come only from closed enums.
+are serializable for wire use but hidden from diagnostics. Presentation strings
+retain the daemon wire contract, are aggregate-frame-bounded, and are omitted
+from metadata diagnostics; metric labels come only from closed enums.
 
 ## Wayland helper boundaries
 

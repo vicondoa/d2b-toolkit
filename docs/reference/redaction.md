@@ -11,9 +11,11 @@ shell-owner payloads. `OperationId` is wire-serializable but its `Debug` and
 received values.
 
 Workload targets, workload and launcher display names, and icon identifiers are
-bounded presentation data and may be rendered in UI. They still must not become
-metrics labels. Ambiguous launcher errors expose only bounded item ids and
-names; they never include provider-private execution data.
+presentation data and may be rendered in UI. Free-form presentation strings
+are bounded by the public frame, omitted from metadata `Debug`, and must not
+become metrics labels. Ambiguous launcher errors expose only sanitized,
+field-bounded item ids and names; they never include provider-private execution
+data.
 
 Metrics helpers return closed provider, posture, availability, state, item
 kind, disposition, or operation classes. They never return a target, workload

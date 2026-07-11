@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Rejected inconsistent workload identity targets, wrapped the shared shell and
+  workload correlation sequence without returning zero, and aligned free-form
+  presentation decoding with the daemon's frame-bounded wire contract.
+- Made additive workload response metadata non-exhaustive while providing
+  constructors, builders, and accessors for downstream clients.
+
 ## [0.2.0] - 2026-07-11
 
 ### Added
@@ -28,8 +36,8 @@ All notable changes to this project will be documented in this file.
 - Updated every toolkit crate and Nix package/check version to 0.2.0.
 - Aligned hello, shell, workload, and error frames with d2b's flattened public
   daemon protocol while retaining optional operation correlation ids.
-- Validated shell names and workload-facing identifiers, targets, tokens,
-  collections, and presentation fields during decode.
+- Validated shell names and workload-facing identifiers, targets, tokens, and
+  collections during decode.
 
 ### Security
 

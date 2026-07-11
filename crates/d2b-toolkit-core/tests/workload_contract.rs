@@ -3,9 +3,9 @@ use d2b_toolkit_core::{
     ExecutionIdentityPosture, FeatureFlag, GraphicalLaunchPosture, HelloOk, IsolationPosture,
     KnownFeatureFlag, LauncherExecDisposition, LauncherItemKind, OperationId, ProtocolToken,
     PublicRequest, PublicResponse, SessionPersistencePosture, ToolkitError, Version,
-    WorkloadAvailability, WorkloadIdentity, WorkloadOpResponse, WorkloadProviderKind,
+    WorkloadAvailability, WorkloadId, WorkloadIdentity, WorkloadOpResponse, WorkloadProviderKind,
     WorkloadPublicSummary, WorkloadState, WorkloadTarget, CURRENT_PROTOCOL_VERSION,
-    MAX_LAUNCHER_ITEMS_PER_WORKLOAD, MAX_PRESENTATION_TEXT_LEN, MAX_WORKLOADS_PER_RESPONSE,
+    MAX_LAUNCHER_ITEMS_PER_WORKLOAD, MAX_WORKLOADS_PER_RESPONSE,
 };
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -156,7 +156,7 @@ fn unsafe_local_fixture_keeps_firefox_generic_and_unknown_capability() {
 }
 
 #[test]
-fn workload_collections_and_presentation_text_are_decode_bounded() {
+fn workload_collections_are_decode_bounded() {
     let workload = serde_json::to_value(list_workload("unsafe-local-list-response.json")).unwrap();
     let too_many_workloads = serde_json::json!({
         "workloads": vec![workload.clone(); MAX_WORKLOADS_PER_RESPONSE + 1]
@@ -171,11 +171,106 @@ fn workload_collections_and_presentation_text_are_decode_bounded() {
         MAX_LAUNCHER_ITEMS_PER_WORKLOAD + 1
     ]);
     assert!(serde_json::from_value::<WorkloadPublicSummary>(too_many_items).is_err());
+}
 
-    let mut long_name = workload;
-    long_name["launcherItems"][0]["name"] =
-        Value::String("x".repeat(MAX_PRESENTATION_TEXT_LEN + 1));
-    assert!(serde_json::from_value::<WorkloadPublicSummary>(long_name).is_err());
+#[test]
+fn presentation_strings_follow_the_upstream_frame_level_contract() {
+    let mut value = serde_json::to_value(list_workload("unsafe-local-list-response.json")).unwrap();
+    let presentation = format!("PRESENTATION_CANARY\n{}", "x".repeat(700));
+    value["identity"]["workloadName"] = Value::String(presentation.clone());
+    value["launcherItems"][0]["name"] = Value::String(presentation.clone());
+    value["launcherItems"][0]["icon"]["id"] = Value::String(presentation.clone());
+    value["launcherItems"][0]["icon"]["name"] = Value::String(presentation.clone());
+
+    let decoded: WorkloadPublicSummary = serde_json::from_value(value.clone()).unwrap();
+    assert_eq!(serde_json::to_value(&decoded).unwrap(), value);
+    assert_eq!(
+        decoded.identity.workload_name(),
+        Some(presentation.as_str())
+    );
+    assert_eq!(decoded.launcher_items()[0].name(), presentation);
+    assert_eq!(
+        decoded.launcher_items()[0].icon().id(),
+        Some(presentation.as_str())
+    );
+
+    let debug = format!("{decoded:?}");
+    assert!(!debug.contains("PRESENTATION_CANARY"));
+    assert!(!debug.contains('\n'));
+    let labels = [
+        decoded.provider_kind().metrics_label_value(),
+        decoded.state().metrics_label_value(),
+        decoded.availability().metrics_label_value(),
+    ];
+    assert!(labels
+        .iter()
+        .all(|label| !label.contains("PRESENTATION_CANARY")));
+}
+
+#[test]
+fn workload_identity_rejects_inconsistent_targets_without_echoing_values() {
+    let workload_mismatch = serde_json::json!({
+        "workloadId": "expected",
+        "realmId": "host",
+        "realmPath": ["host"],
+        "canonicalTarget": "malicious-workload.host.d2b"
+    });
+    let realm_mismatch = serde_json::json!({
+        "workloadId": "expected",
+        "realmId": "host",
+        "realmPath": ["host"],
+        "canonicalTarget": "expected.malicious-realm.d2b"
+    });
+
+    for (value, canary) in [
+        (workload_mismatch, "malicious-workload"),
+        (realm_mismatch, "malicious-realm"),
+    ] {
+        let error = serde_json::from_value::<WorkloadIdentity>(value).unwrap_err();
+        let rendered = format!("{error:?} {error}");
+        assert!(rendered.contains("workload identity is inconsistent"));
+        assert!(!rendered.contains(canary));
+    }
+}
+
+#[test]
+fn workload_identity_constructors_enforce_target_consistency() {
+    let workload_id = WorkloadId::parse("builder").unwrap();
+    let realm_id = d2b_toolkit_core::RealmId::parse("dev").unwrap();
+    let realm_path = d2b_toolkit_core::RealmPath::new(vec![realm_id.clone()]).unwrap();
+    let identity = WorkloadIdentity::new(workload_id.clone(), realm_id.clone(), realm_path.clone());
+    assert_eq!(identity.target().as_str(), "builder.dev.d2b");
+    assert!(identity.legacy_vm_name().is_none());
+
+    for target in ["other.dev.d2b", "builder.other.d2b"] {
+        let inconsistent = WorkloadIdentity::try_new(
+            workload_id.clone(),
+            realm_id.clone(),
+            realm_path.clone(),
+            WorkloadTarget::parse(target).unwrap(),
+        )
+        .unwrap_err();
+        assert!(matches!(
+            inconsistent,
+            ToolkitError::InconsistentWorkloadIdentity
+        ));
+        assert!(!format!("{inconsistent:?}").contains(target));
+    }
+}
+
+#[test]
+fn workload_identity_rejects_unknown_secret_fields_without_echo() {
+    let value = serde_json::json!({
+        "workloadId": "builder",
+        "realmId": "dev",
+        "realmPath": ["dev"],
+        "canonicalTarget": "builder.dev.d2b",
+        "argv": ["IDENTITY_ARG_SECRET_CANARY"]
+    });
+    let error = serde_json::from_value::<WorkloadIdentity>(value).unwrap_err();
+    let rendered = format!("{error:?} {error}");
+    assert!(rendered.contains("unknown field"));
+    assert!(!rendered.contains("IDENTITY_ARG_SECRET_CANARY"));
 }
 
 fn enum_values<T>(fixture: &Value, key: &str) -> Vec<T>
@@ -302,6 +397,40 @@ fn malformed_and_secret_injections_fail_without_echoing_values() {
         "launch-secret-operation",
     ] {
         assert!(!rendered.contains(canary), "leaked {canary}");
+    }
+}
+
+#[test]
+fn launcher_request_secret_fields_are_individually_rejected_without_value_echo() {
+    let base = fixture("workload-frames.json")["launcherExecRequest"].clone();
+    for (field, value, canary) in [
+        (
+            "argv",
+            serde_json::json!(["ARG_SECRET_CANARY"]),
+            "ARG_SECRET_CANARY",
+        ),
+        (
+            "env",
+            serde_json::json!({"TOKEN": "ENV_SECRET_CANARY"}),
+            "ENV_SECRET_CANARY",
+        ),
+        (
+            "cwd",
+            serde_json::json!("/home/alice/CWD_SECRET_CANARY"),
+            "CWD_SECRET_CANARY",
+        ),
+        (
+            "path",
+            serde_json::json!("/bin/PATH_SECRET_CANARY"),
+            "PATH_SECRET_CANARY",
+        ),
+    ] {
+        let mut injected = base.clone();
+        injected["args"][field] = value;
+        let error = serde_json::from_value::<PublicRequest>(injected).unwrap_err();
+        let rendered = format!("{error:?} {error}");
+        assert!(rendered.contains("unknown field"));
+        assert!(!rendered.contains(canary), "leaked {field} value");
     }
 }
 

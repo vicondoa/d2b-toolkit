@@ -6,8 +6,10 @@ async runtime. Callers provide a transport connected to the d2b public daemon
 socket.
 
 Frames use a four-byte little-endian body length followed by one JSON object.
-The public frame limit is 1 MiB. Collection, identifier, token, target, and
-presentation-text fields also have decode-time bounds.
+The public frame limit is 1 MiB. Collections, identifiers, tokens, and targets
+also have decode-time bounds. Free-form presentation strings use the daemon's
+wire shape and are bounded by the aggregate frame limit rather than stricter
+toolkit-only field limits.
 
 ## Negotiation
 
@@ -43,7 +45,8 @@ Workload requests and responses use the daemon's flattened public shape:
 `opId` is optional for compatibility. When present, the client requires an
 exact envelope correlation match. It also checks response operation and
 launcher result identity. Unknown fields, response types, and operation
-mismatches fail with typed errors.
+mismatches fail with typed errors. Shell and workload requests share one
+non-zero correlation-id sequence; it wraps from the maximum integer to `1`.
 
 `workload_inventory`, `workload_list`, `workload_status`, and `launcher_exec`
 cover public inventory, status, and configured launch. `launcher_exec` accepts

@@ -147,6 +147,9 @@ pub enum ToolkitError {
         reason: ValidationReason,
     },
 
+    #[error("workload identity is inconsistent")]
+    InconsistentWorkloadIdentity,
+
     #[error("launcher item is unavailable")]
     LauncherItemUnavailable,
 

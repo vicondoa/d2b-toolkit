@@ -255,8 +255,8 @@ where
     }
 
     pub(crate) fn reserve_op_id(&mut self) -> u64 {
-        let op_id = self.next_op_id;
-        self.next_op_id = self.next_op_id.saturating_add(1);
+        let op_id = self.next_op_id.max(1);
+        self.next_op_id = op_id.wrapping_add(1).max(1);
         op_id
     }
 
@@ -485,6 +485,73 @@ mod tests {
     use serde_json::Value;
     use std::pin::Pin;
     use std::task::{Context, Poll};
+
+    #[test]
+    fn shared_operation_ids_wrap_without_returning_zero() {
+        let mut client = PublicSocketClient::new(FakePublicSocket::default());
+        client.next_op_id = u64::MAX - 1;
+
+        let ids = [
+            client.reserve_op_id(),
+            client.reserve_op_id(),
+            client.reserve_op_id(),
+            client.reserve_op_id(),
+        ];
+
+        assert_eq!(ids, [u64::MAX - 1, u64::MAX, 1, 2]);
+        assert_eq!(
+            ids.iter()
+                .copied()
+                .collect::<std::collections::BTreeSet<_>>()
+                .len(),
+            4
+        );
+        assert!(!ids.contains(&0));
+    }
+
+    #[test]
+    fn shell_and_workload_operations_share_wrapping_id_namespace() {
+        block_on(async {
+            let responses = vec![
+                default_list_response(u64::MAX - 1),
+                PublicResponse::Workload {
+                    op_id: Some(u64::MAX),
+                    response: d2b_toolkit_core::WorkloadOpResponse::List(
+                        d2b_toolkit_core::WorkloadListResult { workloads: vec![] },
+                    ),
+                },
+                default_list_response(1),
+                PublicResponse::Workload {
+                    op_id: Some(2),
+                    response: d2b_toolkit_core::WorkloadOpResponse::List(
+                        d2b_toolkit_core::WorkloadListResult { workloads: vec![] },
+                    ),
+                },
+            ];
+            let capabilities = NegotiatedCapabilities::from_features([
+                KnownFeatureFlag::ConfiguredLaunchV1.wire_value(),
+                KnownFeatureFlag::UnsafeLocalProviderV1.wire_value(),
+            ]);
+            let mut client = PublicSocketClient::with_negotiated_capabilities(
+                FakePublicSocket::with_responses(responses),
+                capabilities,
+            );
+            client.next_op_id = u64::MAX - 1;
+
+            client.shell_list("corp-vm").await.unwrap();
+            client.workload_inventory().await.unwrap();
+            client.shell_list("corp-vm").await.unwrap();
+            client.workload_inventory().await.unwrap();
+
+            let op_ids = client
+                .into_inner()
+                .written_json_frames()
+                .into_iter()
+                .map(|frame| frame["opId"].as_u64().unwrap())
+                .collect::<Vec<_>>();
+            assert_eq!(op_ids, [u64::MAX - 1, u64::MAX, 1, 2]);
+        });
+    }
 
     #[derive(Default)]
     struct FakePublicSocket {

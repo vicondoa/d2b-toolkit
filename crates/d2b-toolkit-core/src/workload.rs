@@ -413,6 +413,15 @@ pub struct WorkloadTarget {
 }
 
 impl WorkloadTarget {
+    pub fn new(workload: WorkloadId, realm: RealmPath) -> Self {
+        let canonical = format!("{}.{}.d2b", workload.as_str(), realm.target_form());
+        Self {
+            canonical,
+            workload,
+            realm,
+        }
+    }
+
     pub fn parse(raw: &str) -> Result<Self, ToolkitError> {
         let body = raw.strip_prefix("d2b://").unwrap_or(raw);
         if body.is_empty() {
@@ -453,12 +462,7 @@ impl WorkloadTarget {
         let realm = RealmPath::new(realm_labels).map_err(|_| ToolkitError::InvalidTarget {
             reason: ValidationReason::TooLong,
         })?;
-        let canonical = format!("{}.{}.d2b", workload.as_str(), realm.target_form());
-        Ok(Self {
-            canonical,
-            workload,
-            realm,
-        })
+        Ok(Self::new(workload, realm))
     }
 
     pub fn as_str(&self) -> &str {
@@ -518,69 +522,12 @@ impl<'de> Deserialize<'de> for WorkloadTarget {
     }
 }
 
-fn validate_presentation(
-    value: &str,
-    field: IdentityField,
-    allow_empty: bool,
-) -> Result<(), ToolkitError> {
-    let reason = if !allow_empty && value.is_empty() {
-        Some(ValidationReason::Empty)
-    } else if value.len() > MAX_PRESENTATION_TEXT_LEN {
-        Some(ValidationReason::TooLong)
-    } else if value.chars().any(char::is_control) {
-        Some(ValidationReason::BadShape)
-    } else {
-        None
-    };
-    match reason {
-        Some(reason) => Err(ToolkitError::InvalidIdentity { field, reason }),
-        None => Ok(()),
-    }
-}
-
-fn deserialize_optional_workload_name<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let value = Option::<String>::deserialize(deserializer)?;
-    if let Some(value) = value.as_deref() {
-        validate_presentation(value, IdentityField::WorkloadName, false)
-            .map_err(serde::de::Error::custom)?;
-    }
-    Ok(value)
-}
-
-fn deserialize_launcher_name<'de, D>(deserializer: D) -> Result<String, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let value = String::deserialize(deserializer)?;
-    validate_presentation(&value, IdentityField::LauncherName, false)
-        .map_err(serde::de::Error::custom)?;
-    Ok(value)
-}
-
-fn deserialize_optional_icon<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let value = Option::<String>::deserialize(deserializer)?;
-    if let Some(value) = value.as_deref() {
-        validate_presentation(value, IdentityField::LauncherIcon, true)
-            .map_err(serde::de::Error::custom)?;
-    }
-    Ok(value)
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[derive(Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+#[non_exhaustive]
 pub struct WorkloadIdentity {
     pub workload_id: WorkloadId,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        deserialize_with = "deserialize_optional_workload_name"
-    )]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workload_name: Option<String>,
     pub realm_id: RealmId,
     pub realm_path: RealmPath,
@@ -594,12 +541,8 @@ pub struct WorkloadIdentity {
 }
 
 impl WorkloadIdentity {
-    pub fn new(
-        workload_id: WorkloadId,
-        realm_id: RealmId,
-        realm_path: RealmPath,
-        canonical_target: WorkloadTarget,
-    ) -> Self {
+    pub fn new(workload_id: WorkloadId, realm_id: RealmId, realm_path: RealmPath) -> Self {
+        let canonical_target = WorkloadTarget::new(workload_id.clone(), realm_path.clone());
         Self {
             workload_id,
             workload_name: None,
@@ -612,8 +555,130 @@ impl WorkloadIdentity {
         }
     }
 
+    pub fn try_new(
+        workload_id: WorkloadId,
+        realm_id: RealmId,
+        realm_path: RealmPath,
+        canonical_target: WorkloadTarget,
+    ) -> Result<Self, ToolkitError> {
+        if canonical_target.workload() != &workload_id || canonical_target.realm() != &realm_path {
+            return Err(ToolkitError::InconsistentWorkloadIdentity);
+        }
+        Ok(Self {
+            workload_id,
+            workload_name: None,
+            realm_id,
+            realm_path,
+            canonical_target,
+            legacy_vm_name: None,
+            runtime_kind: None,
+            provider_id: None,
+        })
+    }
+
+    pub fn with_workload_name(mut self, workload_name: impl Into<String>) -> Self {
+        self.workload_name = Some(workload_name.into());
+        self
+    }
+
+    pub fn with_legacy_vm_name(mut self, legacy_vm_name: LegacyVmName) -> Self {
+        self.legacy_vm_name = Some(legacy_vm_name);
+        self
+    }
+
+    pub fn with_runtime_kind(mut self, runtime_kind: RuntimeKind) -> Self {
+        self.runtime_kind = Some(runtime_kind);
+        self
+    }
+
+    pub fn with_provider_id(mut self, provider_id: ProviderId) -> Self {
+        self.provider_id = Some(provider_id);
+        self
+    }
+
+    pub fn workload_id(&self) -> &WorkloadId {
+        &self.workload_id
+    }
+
+    pub fn workload_name(&self) -> Option<&str> {
+        self.workload_name.as_deref()
+    }
+
+    pub fn realm_id(&self) -> &RealmId {
+        &self.realm_id
+    }
+
+    pub fn realm_path(&self) -> &RealmPath {
+        &self.realm_path
+    }
+
     pub fn target(&self) -> &WorkloadTarget {
         &self.canonical_target
+    }
+
+    pub fn legacy_vm_name(&self) -> Option<&LegacyVmName> {
+        self.legacy_vm_name.as_ref()
+    }
+
+    pub fn runtime_kind(&self) -> Option<&RuntimeKind> {
+        self.runtime_kind.as_ref()
+    }
+
+    pub fn provider_id(&self) -> Option<&ProviderId> {
+        self.provider_id.as_ref()
+    }
+}
+
+impl fmt::Debug for WorkloadIdentity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WorkloadIdentity")
+            .field("workload_id", &self.workload_id)
+            .field("has_workload_name", &self.workload_name.is_some())
+            .field("realm_id", &self.realm_id)
+            .field("realm_path", &self.realm_path)
+            .field("canonical_target", &self.canonical_target)
+            .field("legacy_vm_name", &self.legacy_vm_name)
+            .field("runtime_kind", &self.runtime_kind)
+            .field("provider_id", &self.provider_id)
+            .finish()
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct RawWorkloadIdentity {
+    workload_id: WorkloadId,
+    #[serde(default)]
+    workload_name: Option<String>,
+    realm_id: RealmId,
+    realm_path: RealmPath,
+    canonical_target: WorkloadTarget,
+    #[serde(default)]
+    legacy_vm_name: Option<LegacyVmName>,
+    #[serde(default)]
+    runtime_kind: Option<RuntimeKind>,
+    #[serde(default)]
+    provider_id: Option<ProviderId>,
+}
+
+impl<'de> Deserialize<'de> for WorkloadIdentity {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let raw = RawWorkloadIdentity::deserialize(deserializer)?;
+        let mut identity = Self::try_new(
+            raw.workload_id,
+            raw.realm_id,
+            raw.realm_path,
+            raw.canonical_target,
+        )
+        .map_err(serde::de::Error::custom)?;
+        identity.workload_name = raw.workload_name;
+        identity.legacy_vm_name = raw.legacy_vm_name;
+        identity.runtime_kind = raw.runtime_kind;
+        identity.provider_id = raw.provider_id;
+        Ok(identity)
     }
 }
 
@@ -923,12 +988,51 @@ impl SessionPersistencePosture {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[non_exhaustive]
 pub struct WorkloadExecutionPosture {
     pub isolation: IsolationPosture,
     pub environment: EnvironmentPosture,
     pub display_environment: DisplayEnvironmentPosture,
     pub execution_identity: ExecutionIdentityPosture,
     pub session_persistence: SessionPersistencePosture,
+}
+
+impl WorkloadExecutionPosture {
+    pub const fn new(
+        isolation: IsolationPosture,
+        environment: EnvironmentPosture,
+        display_environment: DisplayEnvironmentPosture,
+        execution_identity: ExecutionIdentityPosture,
+        session_persistence: SessionPersistencePosture,
+    ) -> Self {
+        Self {
+            isolation,
+            environment,
+            display_environment,
+            execution_identity,
+            session_persistence,
+        }
+    }
+
+    pub const fn isolation(&self) -> IsolationPosture {
+        self.isolation
+    }
+
+    pub const fn environment(&self) -> EnvironmentPosture {
+        self.environment
+    }
+
+    pub const fn display_environment(&self) -> DisplayEnvironmentPosture {
+        self.display_environment
+    }
+
+    pub const fn execution_identity(&self) -> ExecutionIdentityPosture {
+        self.execution_identity
+    }
+
+    pub const fn session_persistence(&self) -> SessionPersistencePosture {
+        self.session_persistence
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -947,28 +1051,57 @@ impl LauncherItemKind {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[non_exhaustive]
 pub struct LauncherIcon {
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        deserialize_with = "deserialize_optional_icon"
-    )]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        deserialize_with = "deserialize_optional_icon"
-    )]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+impl LauncherIcon {
+    pub const fn new() -> Self {
+        Self {
+            id: None,
+            name: None,
+        }
+    }
+
+    pub fn with_id(mut self, id: impl Into<String>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    pub fn with_name(mut self, name: impl Into<String>) -> Self {
+        self.name = Some(name.into());
+        self
+    }
+
+    pub fn id(&self) -> Option<&str> {
+        self.id.as_deref()
+    }
+
+    pub fn name(&self) -> Option<&str> {
+        self.name.as_deref()
+    }
+}
+
+impl fmt::Debug for LauncherIcon {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LauncherIcon")
+            .field("has_id", &self.id.is_some())
+            .field("has_name", &self.name.is_some())
+            .finish()
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[non_exhaustive]
 pub struct LauncherItemSummary {
     pub id: ProtocolToken,
-    #[serde(deserialize_with = "deserialize_launcher_name")]
     pub name: String,
     #[serde(default)]
     pub icon: LauncherIcon,
@@ -978,6 +1111,71 @@ pub struct LauncherItemSummary {
     pub graphical: bool,
     #[serde(default)]
     pub capabilities: CapabilitySet,
+}
+
+impl LauncherItemSummary {
+    pub fn new(id: ProtocolToken, name: impl Into<String>, kind: LauncherItemKind) -> Self {
+        Self {
+            id,
+            name: name.into(),
+            icon: LauncherIcon::default(),
+            kind,
+            graphical: false,
+            capabilities: CapabilitySet::default(),
+        }
+    }
+
+    pub fn with_icon(mut self, icon: LauncherIcon) -> Self {
+        self.icon = icon;
+        self
+    }
+
+    pub fn with_graphical(mut self, graphical: bool) -> Self {
+        self.graphical = graphical;
+        self
+    }
+
+    pub fn with_capabilities(mut self, capabilities: CapabilitySet) -> Self {
+        self.capabilities = capabilities;
+        self
+    }
+
+    pub fn id(&self) -> &ProtocolToken {
+        &self.id
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub const fn kind(&self) -> LauncherItemKind {
+        self.kind
+    }
+
+    pub const fn is_graphical(&self) -> bool {
+        self.graphical
+    }
+
+    pub fn icon(&self) -> &LauncherIcon {
+        &self.icon
+    }
+
+    pub fn capabilities(&self) -> &CapabilitySet {
+        &self.capabilities
+    }
+}
+
+impl fmt::Debug for LauncherItemSummary {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LauncherItemSummary")
+            .field("id", &self.id)
+            .field("name_bytes", &self.name.len())
+            .field("icon", &self.icon)
+            .field("kind", &self.kind)
+            .field("graphical", &self.graphical)
+            .field("capabilities", &self.capabilities)
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -1119,8 +1317,9 @@ where
     )
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[non_exhaustive]
 pub struct WorkloadPublicSummary {
     pub identity: WorkloadIdentity,
     pub provider_kind: WorkloadProviderKind,
@@ -1137,6 +1336,78 @@ pub struct WorkloadPublicSummary {
 }
 
 impl WorkloadPublicSummary {
+    pub fn new(
+        identity: WorkloadIdentity,
+        provider_kind: WorkloadProviderKind,
+        state: WorkloadState,
+        execution_posture: WorkloadExecutionPosture,
+        availability: WorkloadAvailability,
+        graphical_posture: GraphicalLaunchPosture,
+    ) -> Self {
+        Self {
+            identity,
+            provider_kind,
+            state,
+            execution_posture,
+            availability,
+            graphical_posture,
+            capabilities: CapabilitySet::default(),
+            launcher_items: Vec::new(),
+            default_item_id: None,
+        }
+    }
+
+    pub fn with_capabilities(mut self, capabilities: CapabilitySet) -> Self {
+        self.capabilities = capabilities;
+        self
+    }
+
+    pub fn with_launcher_items(mut self, launcher_items: Vec<LauncherItemSummary>) -> Self {
+        self.launcher_items = launcher_items;
+        self
+    }
+
+    pub fn with_default_item_id(mut self, default_item_id: ProtocolToken) -> Self {
+        self.default_item_id = Some(default_item_id);
+        self
+    }
+
+    pub fn identity(&self) -> &WorkloadIdentity {
+        &self.identity
+    }
+
+    pub fn execution_posture(&self) -> &WorkloadExecutionPosture {
+        &self.execution_posture
+    }
+
+    pub const fn provider_kind(&self) -> WorkloadProviderKind {
+        self.provider_kind
+    }
+
+    pub const fn state(&self) -> WorkloadState {
+        self.state
+    }
+
+    pub const fn availability(&self) -> WorkloadAvailability {
+        self.availability
+    }
+
+    pub const fn graphical_posture(&self) -> GraphicalLaunchPosture {
+        self.graphical_posture
+    }
+
+    pub fn capabilities(&self) -> &CapabilitySet {
+        &self.capabilities
+    }
+
+    pub fn launcher_items(&self) -> &[LauncherItemSummary] {
+        &self.launcher_items
+    }
+
+    pub fn default_item_id(&self) -> Option<&ProtocolToken> {
+        self.default_item_id.as_ref()
+    }
+
     pub fn select_launcher_item(
         &self,
         explicit_item: Option<&ProtocolToken>,
@@ -1174,6 +1445,22 @@ impl WorkloadPublicSummary {
                 })
             }
         }
+    }
+}
+
+impl fmt::Debug for WorkloadPublicSummary {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WorkloadPublicSummary")
+            .field("identity", &self.identity)
+            .field("provider_kind", &self.provider_kind)
+            .field("state", &self.state)
+            .field("execution_posture", &self.execution_posture)
+            .field("availability", &self.availability)
+            .field("graphical_posture", &self.graphical_posture)
+            .field("capabilities", &self.capabilities)
+            .field("launcher_items", &self.launcher_items)
+            .field("default_item_id", &self.default_item_id)
+            .finish()
     }
 }
 
