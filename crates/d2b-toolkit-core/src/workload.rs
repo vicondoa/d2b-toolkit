@@ -1,0 +1,1699 @@
+use crate::error::{
+    IdentityField, LauncherItemCandidate, LauncherItemCandidates, TokenKind, ValidationReason,
+};
+use crate::ToolkitError;
+use serde::de::{SeqAccess, Visitor};
+use serde::ser::SerializeSeq;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::collections::BTreeSet;
+use std::fmt;
+use std::marker::PhantomData;
+use std::str::FromStr;
+
+pub const MAX_ID_LEN: usize = 128;
+pub const MAX_PROTOCOL_TOKEN_LEN: usize = 64;
+pub const MAX_IDENTITY_TOKEN_LEN: usize = 160;
+pub const MAX_REALM_LABELS: usize = 16;
+pub const MAX_REALM_PATH_BYTES: usize = 255;
+pub const MAX_WORKLOAD_TARGET_LEN: usize = 388;
+pub const MAX_PRESENTATION_TEXT_LEN: usize = 512;
+pub const MAX_CAPABILITY_SET_LEN: usize = 64;
+pub const MAX_LAUNCHER_ITEMS_PER_WORKLOAD: usize = 64;
+pub const MAX_WORKLOADS_PER_RESPONSE: usize = 512;
+
+fn is_label(value: &str) -> bool {
+    let mut chars = value.chars();
+    matches!(chars.next(), Some(first) if first.is_ascii_lowercase())
+        && chars.all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '-')
+}
+
+fn validate_label(value: &str) -> ValidationReason {
+    if value.is_empty() {
+        ValidationReason::Empty
+    } else if value.len() > MAX_ID_LEN {
+        ValidationReason::TooLong
+    } else if !is_label(value) {
+        ValidationReason::BadShape
+    } else {
+        ValidationReason::Inconsistent
+    }
+}
+
+macro_rules! label_newtype {
+    ($name:ident, $field:expr) => {
+        #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+        #[serde(transparent)]
+        pub struct $name(String);
+
+        impl $name {
+            pub fn parse(value: impl Into<String>) -> Result<Self, ToolkitError> {
+                let value = value.into();
+                if !value.is_empty() && value.len() <= MAX_ID_LEN && is_label(&value) {
+                    Ok(Self(value))
+                } else {
+                    Err(ToolkitError::InvalidIdentity {
+                        field: $field,
+                        reason: validate_label(&value),
+                    })
+                }
+            }
+
+            pub fn as_str(&self) -> &str {
+                &self.0
+            }
+        }
+
+        impl fmt::Debug for $name {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.debug_tuple(stringify!($name)).field(&self.0).finish()
+            }
+        }
+
+        impl fmt::Display for $name {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str(&self.0)
+            }
+        }
+
+        impl FromStr for $name {
+            type Err = ToolkitError;
+
+            fn from_str(value: &str) -> Result<Self, Self::Err> {
+                Self::parse(value)
+            }
+        }
+
+        impl<'de> Deserialize<'de> for $name {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: Deserializer<'de>,
+            {
+                Self::parse(String::deserialize(deserializer)?).map_err(serde::de::Error::custom)
+            }
+        }
+    };
+}
+
+label_newtype!(WorkloadId, IdentityField::WorkloadId);
+label_newtype!(RealmId, IdentityField::RealmId);
+
+fn is_identity_token(value: &str) -> bool {
+    let mut chars = value.chars();
+    matches!(chars.next(), Some(first) if first.is_ascii_alphanumeric())
+        && chars.all(|ch| {
+            ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | ':' | '/' | '@' | '+' | '-')
+        })
+}
+
+macro_rules! identity_token_newtype {
+    ($name:ident, $field:expr) => {
+        #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+        #[serde(transparent)]
+        pub struct $name(String);
+
+        impl $name {
+            pub fn parse(value: impl Into<String>) -> Result<Self, ToolkitError> {
+                let value = value.into();
+                let reason = if value.is_empty() {
+                    Some(ValidationReason::Empty)
+                } else if value.len() > MAX_IDENTITY_TOKEN_LEN {
+                    Some(ValidationReason::TooLong)
+                } else if !is_identity_token(&value) {
+                    Some(ValidationReason::BadShape)
+                } else {
+                    None
+                };
+                match reason {
+                    Some(reason) => Err(ToolkitError::InvalidIdentity {
+                        field: $field,
+                        reason,
+                    }),
+                    None => Ok(Self(value)),
+                }
+            }
+
+            pub fn as_str(&self) -> &str {
+                &self.0
+            }
+        }
+
+        impl fmt::Debug for $name {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.debug_tuple(stringify!($name)).field(&self.0).finish()
+            }
+        }
+
+        impl fmt::Display for $name {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str(&self.0)
+            }
+        }
+
+        impl FromStr for $name {
+            type Err = ToolkitError;
+
+            fn from_str(value: &str) -> Result<Self, Self::Err> {
+                Self::parse(value)
+            }
+        }
+
+        impl<'de> Deserialize<'de> for $name {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: Deserializer<'de>,
+            {
+                Self::parse(String::deserialize(deserializer)?).map_err(serde::de::Error::custom)
+            }
+        }
+    };
+}
+
+identity_token_newtype!(LegacyVmName, IdentityField::LegacyVmName);
+identity_token_newtype!(RuntimeKind, IdentityField::RuntimeKind);
+identity_token_newtype!(ProviderId, IdentityField::ProviderId);
+
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+#[serde(transparent)]
+pub struct ProtocolToken(String);
+
+impl ProtocolToken {
+    pub fn parse(value: impl Into<String>) -> Result<Self, ToolkitError> {
+        let value = value.into();
+        let reason = if value.is_empty() {
+            Some(ValidationReason::Empty)
+        } else if value.len() > MAX_PROTOCOL_TOKEN_LEN {
+            Some(ValidationReason::TooLong)
+        } else if !value.bytes().all(|byte| byte.is_ascii_graphic()) {
+            Some(ValidationReason::BadShape)
+        } else {
+            None
+        };
+        match reason {
+            Some(reason) => Err(ToolkitError::InvalidToken {
+                kind: TokenKind::Protocol,
+                reason,
+            }),
+            None => Ok(Self(value)),
+        }
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Debug for ProtocolToken {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("ProtocolToken").field(&self.0).finish()
+    }
+}
+
+impl fmt::Display for ProtocolToken {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl FromStr for ProtocolToken {
+    type Err = ToolkitError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::parse(value)
+    }
+}
+
+impl<'de> Deserialize<'de> for ProtocolToken {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Self::parse(String::deserialize(deserializer)?).map_err(serde::de::Error::custom)
+    }
+}
+
+const SECRET_MARKERS: &[&str] = &[
+    "secret",
+    "password",
+    "passwd",
+    "bearer",
+    "credential",
+    "private",
+    "apikey",
+    "token",
+    "privatekey",
+    "accesstoken",
+    "refreshtoken",
+    "sessiontoken",
+];
+
+fn is_operation_id(value: &str) -> bool {
+    let mut chars = value.chars();
+    if !matches!(chars.next(), Some(first) if first.is_ascii_alphanumeric())
+        || !chars.all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.'))
+        || value.contains("..")
+    {
+        return false;
+    }
+    let compact = value
+        .chars()
+        .filter(|ch| !matches!(ch, '-' | '_' | '.'))
+        .flat_map(char::to_lowercase)
+        .collect::<String>();
+    !SECRET_MARKERS.iter().any(|marker| compact.contains(marker))
+}
+
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+#[serde(transparent)]
+pub struct OperationId(String);
+
+impl OperationId {
+    pub fn parse(value: impl Into<String>) -> Result<Self, ToolkitError> {
+        let value = value.into();
+        let reason = if value.is_empty() {
+            Some(ValidationReason::Empty)
+        } else if value.len() > MAX_ID_LEN {
+            Some(ValidationReason::TooLong)
+        } else if !is_operation_id(&value) {
+            Some(ValidationReason::BadShape)
+        } else {
+            None
+        };
+        match reason {
+            Some(reason) => Err(ToolkitError::InvalidToken {
+                kind: TokenKind::Operation,
+                reason,
+            }),
+            None => Ok(Self(value)),
+        }
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Debug for OperationId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("OperationId([redacted])")
+    }
+}
+
+impl fmt::Display for OperationId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("[redacted]")
+    }
+}
+
+impl FromStr for OperationId {
+    type Err = ToolkitError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::parse(value)
+    }
+}
+
+impl<'de> Deserialize<'de> for OperationId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Self::parse(String::deserialize(deserializer)?).map_err(serde::de::Error::custom)
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+#[serde(transparent)]
+pub struct RealmPath(Vec<RealmId>);
+
+impl RealmPath {
+    pub fn new(labels: Vec<RealmId>) -> Result<Self, ToolkitError> {
+        let total = labels
+            .iter()
+            .map(|label| label.as_str().len())
+            .sum::<usize>()
+            + labels.len().saturating_sub(1);
+        let reason = if labels.is_empty() {
+            Some(ValidationReason::Empty)
+        } else if labels.len() > MAX_REALM_LABELS || total > MAX_REALM_PATH_BYTES {
+            Some(ValidationReason::TooLong)
+        } else {
+            None
+        };
+        match reason {
+            Some(reason) => Err(ToolkitError::InvalidIdentity {
+                field: IdentityField::RealmPath,
+                reason,
+            }),
+            None => Ok(Self(labels)),
+        }
+    }
+
+    pub fn labels(&self) -> &[RealmId] {
+        &self.0
+    }
+
+    pub fn target_form(&self) -> String {
+        self.0
+            .iter()
+            .map(RealmId::as_str)
+            .collect::<Vec<_>>()
+            .join(".")
+    }
+}
+
+impl fmt::Debug for RealmPath {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("RealmPath")
+            .field(&self.target_form())
+            .finish()
+    }
+}
+
+impl<'de> Deserialize<'de> for RealmPath {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct RealmPathVisitor;
+
+        impl<'de> Visitor<'de> for RealmPathVisitor {
+            type Value = RealmPath;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                formatter.write_str("a bounded non-empty realm label array")
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: SeqAccess<'de>,
+            {
+                if seq.size_hint().unwrap_or(0) > MAX_REALM_LABELS {
+                    return Err(serde::de::Error::custom("realm path exceeds label bound"));
+                }
+                let mut labels = Vec::new();
+                while let Some(label) = seq.next_element()? {
+                    if labels.len() == MAX_REALM_LABELS {
+                        return Err(serde::de::Error::custom("realm path exceeds label bound"));
+                    }
+                    labels.push(label);
+                }
+                RealmPath::new(labels).map_err(serde::de::Error::custom)
+            }
+        }
+
+        deserializer.deserialize_seq(RealmPathVisitor)
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct WorkloadTarget {
+    canonical: String,
+    workload: WorkloadId,
+    realm: RealmPath,
+}
+
+impl WorkloadTarget {
+    pub fn new(workload: WorkloadId, realm: RealmPath) -> Self {
+        let canonical = format!("{}.{}.d2b", workload.as_str(), realm.target_form());
+        Self {
+            canonical,
+            workload,
+            realm,
+        }
+    }
+
+    pub fn parse(raw: &str) -> Result<Self, ToolkitError> {
+        let body = raw.strip_prefix("d2b://").unwrap_or(raw);
+        if body.is_empty() {
+            return Err(ToolkitError::InvalidTarget {
+                reason: ValidationReason::Empty,
+            });
+        }
+        if body.len() > MAX_WORKLOAD_TARGET_LEN {
+            return Err(ToolkitError::InvalidTarget {
+                reason: ValidationReason::TooLong,
+            });
+        }
+        let mut labels = body.split('.').collect::<Vec<_>>();
+        if labels.len() < 3 || labels.pop() != Some("d2b") {
+            return Err(ToolkitError::InvalidTarget {
+                reason: ValidationReason::BadShape,
+            });
+        }
+        if labels
+            .iter()
+            .any(|label| matches!(*label, "all" | "*" | "d2b"))
+        {
+            return Err(ToolkitError::InvalidTarget {
+                reason: ValidationReason::BadShape,
+            });
+        }
+        let workload = WorkloadId::parse(labels[0]).map_err(|_| ToolkitError::InvalidTarget {
+            reason: ValidationReason::BadShape,
+        })?;
+        let realm_labels = labels[1..]
+            .iter()
+            .map(|label| {
+                RealmId::parse(*label).map_err(|_| ToolkitError::InvalidTarget {
+                    reason: ValidationReason::BadShape,
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let realm = RealmPath::new(realm_labels).map_err(|_| ToolkitError::InvalidTarget {
+            reason: ValidationReason::TooLong,
+        })?;
+        Ok(Self::new(workload, realm))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.canonical
+    }
+
+    pub fn to_canonical(&self) -> String {
+        self.canonical.clone()
+    }
+
+    pub fn workload(&self) -> &WorkloadId {
+        &self.workload
+    }
+
+    pub fn realm(&self) -> &RealmPath {
+        &self.realm
+    }
+}
+
+impl fmt::Debug for WorkloadTarget {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("WorkloadTarget")
+            .field(&self.canonical)
+            .finish()
+    }
+}
+
+impl fmt::Display for WorkloadTarget {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.canonical)
+    }
+}
+
+impl FromStr for WorkloadTarget {
+    type Err = ToolkitError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::parse(value)
+    }
+}
+
+impl Serialize for WorkloadTarget {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.canonical)
+    }
+}
+
+impl<'de> Deserialize<'de> for WorkloadTarget {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Self::parse(&String::deserialize(deserializer)?).map_err(serde::de::Error::custom)
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+#[non_exhaustive]
+pub struct WorkloadIdentity {
+    pub workload_id: WorkloadId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workload_name: Option<String>,
+    pub realm_id: RealmId,
+    pub realm_path: RealmPath,
+    pub canonical_target: WorkloadTarget,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub legacy_vm_name: Option<LegacyVmName>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_kind: Option<RuntimeKind>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_id: Option<ProviderId>,
+}
+
+impl WorkloadIdentity {
+    pub fn new(workload_id: WorkloadId, realm_id: RealmId, realm_path: RealmPath) -> Self {
+        let canonical_target = WorkloadTarget::new(workload_id.clone(), realm_path.clone());
+        Self {
+            workload_id,
+            workload_name: None,
+            realm_id,
+            realm_path,
+            canonical_target,
+            legacy_vm_name: None,
+            runtime_kind: None,
+            provider_id: None,
+        }
+    }
+
+    pub fn try_new(
+        workload_id: WorkloadId,
+        realm_id: RealmId,
+        realm_path: RealmPath,
+        canonical_target: WorkloadTarget,
+    ) -> Result<Self, ToolkitError> {
+        if canonical_target.workload() != &workload_id || canonical_target.realm() != &realm_path {
+            return Err(ToolkitError::InconsistentWorkloadIdentity);
+        }
+        Ok(Self {
+            workload_id,
+            workload_name: None,
+            realm_id,
+            realm_path,
+            canonical_target,
+            legacy_vm_name: None,
+            runtime_kind: None,
+            provider_id: None,
+        })
+    }
+
+    pub fn with_workload_name(mut self, workload_name: impl Into<String>) -> Self {
+        self.workload_name = Some(workload_name.into());
+        self
+    }
+
+    pub fn with_legacy_vm_name(mut self, legacy_vm_name: LegacyVmName) -> Self {
+        self.legacy_vm_name = Some(legacy_vm_name);
+        self
+    }
+
+    pub fn with_runtime_kind(mut self, runtime_kind: RuntimeKind) -> Self {
+        self.runtime_kind = Some(runtime_kind);
+        self
+    }
+
+    pub fn with_provider_id(mut self, provider_id: ProviderId) -> Self {
+        self.provider_id = Some(provider_id);
+        self
+    }
+
+    pub fn workload_id(&self) -> &WorkloadId {
+        &self.workload_id
+    }
+
+    pub fn workload_name(&self) -> Option<&str> {
+        self.workload_name.as_deref()
+    }
+
+    pub fn realm_id(&self) -> &RealmId {
+        &self.realm_id
+    }
+
+    pub fn realm_path(&self) -> &RealmPath {
+        &self.realm_path
+    }
+
+    pub fn target(&self) -> &WorkloadTarget {
+        &self.canonical_target
+    }
+
+    pub fn legacy_vm_name(&self) -> Option<&LegacyVmName> {
+        self.legacy_vm_name.as_ref()
+    }
+
+    pub fn runtime_kind(&self) -> Option<&RuntimeKind> {
+        self.runtime_kind.as_ref()
+    }
+
+    pub fn provider_id(&self) -> Option<&ProviderId> {
+        self.provider_id.as_ref()
+    }
+}
+
+impl fmt::Debug for WorkloadIdentity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WorkloadIdentity")
+            .field("workload_id", &self.workload_id)
+            .field("has_workload_name", &self.workload_name.is_some())
+            .field("realm_id", &self.realm_id)
+            .field("realm_path", &self.realm_path)
+            .field("canonical_target", &self.canonical_target)
+            .field("legacy_vm_name", &self.legacy_vm_name)
+            .field("runtime_kind", &self.runtime_kind)
+            .field("provider_id", &self.provider_id)
+            .finish()
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct RawWorkloadIdentity {
+    workload_id: WorkloadId,
+    #[serde(default)]
+    workload_name: Option<String>,
+    realm_id: RealmId,
+    realm_path: RealmPath,
+    canonical_target: WorkloadTarget,
+    #[serde(default)]
+    legacy_vm_name: Option<LegacyVmName>,
+    #[serde(default)]
+    runtime_kind: Option<RuntimeKind>,
+    #[serde(default)]
+    provider_id: Option<ProviderId>,
+}
+
+impl<'de> Deserialize<'de> for WorkloadIdentity {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let raw = RawWorkloadIdentity::deserialize(deserializer)?;
+        let mut identity = Self::try_new(
+            raw.workload_id,
+            raw.realm_id,
+            raw.realm_path,
+            raw.canonical_target,
+        )
+        .map_err(serde::de::Error::custom)?;
+        identity.workload_name = raw.workload_name;
+        identity.legacy_vm_name = raw.legacy_vm_name;
+        identity.runtime_kind = raw.runtime_kind;
+        identity.provider_id = raw.provider_id;
+        Ok(identity)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Capability {
+    Lifecycle,
+    Exec,
+    Pty,
+    Logs,
+    FileCopy,
+    PortForward,
+    PersistentShell,
+    Vsock,
+    Virtiofs,
+    WindowForwarding,
+    DisplayStreaming,
+    Clipboard,
+    AudioPlayback,
+    AudioCapture,
+    Hid,
+    Usb,
+    GpuAccel,
+    Snapshots,
+    Hotplug,
+    EphemeralSessions,
+    ProviderManagedIsolation,
+    ConfiguredLaunch,
+}
+
+impl Capability {
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::Lifecycle => "lifecycle",
+            Self::Exec => "exec",
+            Self::Pty => "pty",
+            Self::Logs => "logs",
+            Self::FileCopy => "file-copy",
+            Self::PortForward => "port-forward",
+            Self::PersistentShell => "persistent-shell",
+            Self::Vsock => "vsock",
+            Self::Virtiofs => "virtiofs",
+            Self::WindowForwarding => "window-forwarding",
+            Self::DisplayStreaming => "display-streaming",
+            Self::Clipboard => "clipboard",
+            Self::AudioPlayback => "audio-playback",
+            Self::AudioCapture => "audio-capture",
+            Self::Hid => "hid",
+            Self::Usb => "usb",
+            Self::GpuAccel => "gpu-accel",
+            Self::Snapshots => "snapshots",
+            Self::Hotplug => "hotplug",
+            Self::EphemeralSessions => "ephemeral-sessions",
+            Self::ProviderManagedIsolation => "provider-managed-isolation",
+            Self::ConfiguredLaunch => "configured-launch",
+        }
+    }
+
+    pub fn from_code(code: &str) -> Option<Self> {
+        Some(match code {
+            "lifecycle" => Self::Lifecycle,
+            "exec" => Self::Exec,
+            "pty" => Self::Pty,
+            "logs" => Self::Logs,
+            "file-copy" => Self::FileCopy,
+            "port-forward" => Self::PortForward,
+            "persistent-shell" => Self::PersistentShell,
+            "vsock" => Self::Vsock,
+            "virtiofs" => Self::Virtiofs,
+            "window-forwarding" => Self::WindowForwarding,
+            "display-streaming" => Self::DisplayStreaming,
+            "clipboard" => Self::Clipboard,
+            "audio-playback" => Self::AudioPlayback,
+            "audio-capture" => Self::AudioCapture,
+            "hid" => Self::Hid,
+            "usb" => Self::Usb,
+            "gpu-accel" => Self::GpuAccel,
+            "snapshots" => Self::Snapshots,
+            "hotplug" => Self::Hotplug,
+            "ephemeral-sessions" => Self::EphemeralSessions,
+            "provider-managed-isolation" => Self::ProviderManagedIsolation,
+            "configured-launch" => Self::ConfiguredLaunch,
+            _ => return None,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CapabilitySet {
+    known: BTreeSet<Capability>,
+    unknown: BTreeSet<ProtocolToken>,
+}
+
+impl CapabilitySet {
+    pub fn empty() -> Self {
+        Self::default()
+    }
+
+    pub fn from_caps<I>(capabilities: I) -> Self
+    where
+        I: IntoIterator<Item = Capability>,
+    {
+        Self {
+            known: capabilities.into_iter().collect(),
+            unknown: BTreeSet::new(),
+        }
+    }
+
+    pub fn from_tokens<I>(tokens: I) -> Self
+    where
+        I: IntoIterator<Item = ProtocolToken>,
+    {
+        let mut set = Self::empty();
+        for token in tokens {
+            if let Some(capability) = Capability::from_code(token.as_str()) {
+                set.known.insert(capability);
+            } else {
+                set.unknown.insert(token);
+            }
+        }
+        set
+    }
+
+    pub fn with(mut self, capability: Capability) -> Self {
+        self.known.insert(capability);
+        self
+    }
+
+    pub fn has(&self, capability: Capability) -> bool {
+        self.known.contains(&capability)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = Capability> + '_ {
+        self.known.iter().copied()
+    }
+
+    pub fn unknown_iter(&self) -> impl Iterator<Item = &ProtocolToken> {
+        self.unknown.iter()
+    }
+}
+
+impl Serialize for CapabilitySet {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut codes = self
+            .known
+            .iter()
+            .map(|capability| capability.code())
+            .chain(self.unknown.iter().map(ProtocolToken::as_str))
+            .collect::<Vec<_>>();
+        codes.sort_unstable();
+        let mut sequence = serializer.serialize_seq(Some(codes.len()))?;
+        for code in codes {
+            sequence.serialize_element(code)?;
+        }
+        sequence.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for CapabilitySet {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct CapabilitySetVisitor;
+
+        impl<'de> Visitor<'de> for CapabilitySetVisitor {
+            type Value = CapabilitySet;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                formatter.write_str("a bounded capability token array")
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: SeqAccess<'de>,
+            {
+                if seq.size_hint().unwrap_or(0) > MAX_CAPABILITY_SET_LEN {
+                    return Err(serde::de::Error::custom(
+                        "capability set exceeds entry bound",
+                    ));
+                }
+                let mut tokens = Vec::new();
+                while let Some(token) = seq.next_element()? {
+                    if tokens.len() == MAX_CAPABILITY_SET_LEN {
+                        return Err(serde::de::Error::custom(
+                            "capability set exceeds entry bound",
+                        ));
+                    }
+                    tokens.push(token);
+                }
+                Ok(CapabilitySet::from_tokens(tokens))
+            }
+        }
+
+        deserializer.deserialize_seq(CapabilitySetVisitor)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum WorkloadProviderKind {
+    LocalVm,
+    QemuMedia,
+    ProviderManaged,
+    UnsafeLocal,
+}
+
+impl WorkloadProviderKind {
+    pub const fn metrics_label_value(self) -> &'static str {
+        match self {
+            Self::LocalVm => "local-vm",
+            Self::QemuMedia => "qemu-media",
+            Self::ProviderManaged => "provider-managed",
+            Self::UnsafeLocal => "unsafe-local",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum IsolationPosture {
+    VirtualMachine,
+    ProviderManaged,
+    UnsafeLocal,
+}
+
+impl IsolationPosture {
+    pub const fn metrics_label_value(self) -> &'static str {
+        match self {
+            Self::VirtualMachine => "virtual-machine",
+            Self::ProviderManaged => "provider-managed",
+            Self::UnsafeLocal => "unsafe-local",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum EnvironmentPosture {
+    RuntimeManaged,
+    SystemdUserManagerAmbient,
+}
+
+impl EnvironmentPosture {
+    pub const fn metrics_label_value(self) -> &'static str {
+        match self {
+            Self::RuntimeManaged => "runtime-managed",
+            Self::SystemdUserManagerAmbient => "systemd-user-manager-ambient",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum DisplayEnvironmentPosture {
+    RuntimeManaged,
+    WaylandProxyOnly,
+    NotApplicable,
+}
+
+impl DisplayEnvironmentPosture {
+    pub const fn metrics_label_value(self) -> &'static str {
+        match self {
+            Self::RuntimeManaged => "runtime-managed",
+            Self::WaylandProxyOnly => "wayland-proxy-only",
+            Self::NotApplicable => "not-applicable",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ExecutionIdentityPosture {
+    WorkloadUser,
+    ProviderManaged,
+    AuthenticatedRequesterUid,
+}
+
+impl ExecutionIdentityPosture {
+    pub const fn metrics_label_value(self) -> &'static str {
+        match self {
+            Self::WorkloadUser => "workload-user",
+            Self::ProviderManaged => "provider-managed",
+            Self::AuthenticatedRequesterUid => "authenticated-requester-uid",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SessionPersistencePosture {
+    RuntimeManaged,
+    UserManagerLifetime,
+}
+
+impl SessionPersistencePosture {
+    pub const fn metrics_label_value(self) -> &'static str {
+        match self {
+            Self::RuntimeManaged => "runtime-managed",
+            Self::UserManagerLifetime => "user-manager-lifetime",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[non_exhaustive]
+pub struct WorkloadExecutionPosture {
+    pub isolation: IsolationPosture,
+    pub environment: EnvironmentPosture,
+    pub display_environment: DisplayEnvironmentPosture,
+    pub execution_identity: ExecutionIdentityPosture,
+    pub session_persistence: SessionPersistencePosture,
+}
+
+impl WorkloadExecutionPosture {
+    pub const fn new(
+        isolation: IsolationPosture,
+        environment: EnvironmentPosture,
+        display_environment: DisplayEnvironmentPosture,
+        execution_identity: ExecutionIdentityPosture,
+        session_persistence: SessionPersistencePosture,
+    ) -> Self {
+        Self {
+            isolation,
+            environment,
+            display_environment,
+            execution_identity,
+            session_persistence,
+        }
+    }
+
+    pub const fn isolation(&self) -> IsolationPosture {
+        self.isolation
+    }
+
+    pub const fn environment(&self) -> EnvironmentPosture {
+        self.environment
+    }
+
+    pub const fn display_environment(&self) -> DisplayEnvironmentPosture {
+        self.display_environment
+    }
+
+    pub const fn execution_identity(&self) -> ExecutionIdentityPosture {
+        self.execution_identity
+    }
+
+    pub const fn session_persistence(&self) -> SessionPersistencePosture {
+        self.session_persistence
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LauncherItemKind {
+    Exec,
+    Shell,
+}
+
+impl LauncherItemKind {
+    pub const fn metrics_label_value(self) -> &'static str {
+        match self {
+            Self::Exec => "exec",
+            Self::Shell => "shell",
+        }
+    }
+}
+
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[non_exhaustive]
+pub struct LauncherIcon {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
+impl LauncherIcon {
+    pub const fn new() -> Self {
+        Self {
+            id: None,
+            name: None,
+        }
+    }
+
+    pub fn with_id(mut self, id: impl Into<String>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    pub fn with_name(mut self, name: impl Into<String>) -> Self {
+        self.name = Some(name.into());
+        self
+    }
+
+    pub fn id(&self) -> Option<&str> {
+        self.id.as_deref()
+    }
+
+    pub fn name(&self) -> Option<&str> {
+        self.name.as_deref()
+    }
+}
+
+impl fmt::Debug for LauncherIcon {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LauncherIcon")
+            .field("has_id", &self.id.is_some())
+            .field("has_name", &self.name.is_some())
+            .finish()
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[non_exhaustive]
+pub struct LauncherItemSummary {
+    pub id: ProtocolToken,
+    pub name: String,
+    #[serde(default)]
+    pub icon: LauncherIcon,
+    #[serde(rename = "type")]
+    pub kind: LauncherItemKind,
+    #[serde(default)]
+    pub graphical: bool,
+    #[serde(default)]
+    pub capabilities: CapabilitySet,
+}
+
+impl LauncherItemSummary {
+    pub fn new(id: ProtocolToken, name: impl Into<String>, kind: LauncherItemKind) -> Self {
+        Self {
+            id,
+            name: name.into(),
+            icon: LauncherIcon::default(),
+            kind,
+            graphical: false,
+            capabilities: CapabilitySet::default(),
+        }
+    }
+
+    pub fn with_icon(mut self, icon: LauncherIcon) -> Self {
+        self.icon = icon;
+        self
+    }
+
+    pub fn with_graphical(mut self, graphical: bool) -> Self {
+        self.graphical = graphical;
+        self
+    }
+
+    pub fn with_capabilities(mut self, capabilities: CapabilitySet) -> Self {
+        self.capabilities = capabilities;
+        self
+    }
+
+    pub fn id(&self) -> &ProtocolToken {
+        &self.id
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub const fn kind(&self) -> LauncherItemKind {
+        self.kind
+    }
+
+    pub const fn is_graphical(&self) -> bool {
+        self.graphical
+    }
+
+    pub fn icon(&self) -> &LauncherIcon {
+        &self.icon
+    }
+
+    pub fn capabilities(&self) -> &CapabilitySet {
+        &self.capabilities
+    }
+}
+
+impl fmt::Debug for LauncherItemSummary {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LauncherItemSummary")
+            .field("id", &self.id)
+            .field("name_bytes", &self.name.len())
+            .field("icon", &self.icon)
+            .field("kind", &self.kind)
+            .field("graphical", &self.graphical)
+            .field("capabilities", &self.capabilities)
+            .finish()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum WorkloadState {
+    Stopped,
+    Starting,
+    Running,
+    Stopping,
+    Failed,
+}
+
+impl WorkloadState {
+    pub const fn metrics_label_value(self) -> &'static str {
+        match self {
+            Self::Stopped => "stopped",
+            Self::Starting => "starting",
+            Self::Running => "running",
+            Self::Stopping => "stopping",
+            Self::Failed => "failed",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum WorkloadAvailability {
+    Ready,
+    HelperUnavailable,
+    HelperStale,
+    UserManagerUnavailable,
+    GraphicalSessionInactive,
+    WaylandUnavailable,
+    ProxyUnavailable,
+    Degraded,
+}
+
+impl WorkloadAvailability {
+    pub const fn metrics_label_value(self) -> &'static str {
+        match self {
+            Self::Ready => "ready",
+            Self::HelperUnavailable => "helper-unavailable",
+            Self::HelperStale => "helper-stale",
+            Self::UserManagerUnavailable => "user-manager-unavailable",
+            Self::GraphicalSessionInactive => "graphical-session-inactive",
+            Self::WaylandUnavailable => "wayland-unavailable",
+            Self::ProxyUnavailable => "proxy-unavailable",
+            Self::Degraded => "degraded",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum GraphicalLaunchPosture {
+    Proxied,
+    NotApplicable,
+    GraphicalSessionInactive,
+    WaylandUnavailable,
+    ProxyUnavailable,
+}
+
+impl GraphicalLaunchPosture {
+    pub const fn metrics_label_value(self) -> &'static str {
+        match self {
+            Self::Proxied => "proxied",
+            Self::NotApplicable => "not-applicable",
+            Self::GraphicalSessionInactive => "graphical-session-inactive",
+            Self::WaylandUnavailable => "wayland-unavailable",
+            Self::ProxyUnavailable => "proxy-unavailable",
+        }
+    }
+}
+
+struct BoundedVecVisitor<T, const MAX: usize> {
+    expected: &'static str,
+    marker: PhantomData<T>,
+}
+
+impl<'de, T, const MAX: usize> Visitor<'de> for BoundedVecVisitor<T, MAX>
+where
+    T: Deserialize<'de>,
+{
+    type Value = Vec<T>;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.expected)
+    }
+
+    fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+    where
+        A: SeqAccess<'de>,
+    {
+        if seq.size_hint().unwrap_or(0) > MAX {
+            return Err(serde::de::Error::custom("array exceeds entry bound"));
+        }
+        let mut values = Vec::new();
+        while let Some(value) = seq.next_element()? {
+            if values.len() == MAX {
+                return Err(serde::de::Error::custom("array exceeds entry bound"));
+            }
+            values.push(value);
+        }
+        Ok(values)
+    }
+}
+
+fn deserialize_bounded_vec<'de, D, T, const MAX: usize>(
+    deserializer: D,
+    expected: &'static str,
+) -> Result<Vec<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    deserializer.deserialize_seq(BoundedVecVisitor::<T, MAX> {
+        expected,
+        marker: PhantomData,
+    })
+}
+
+fn deserialize_launcher_items<'de, D>(deserializer: D) -> Result<Vec<LauncherItemSummary>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    deserialize_bounded_vec::<D, LauncherItemSummary, MAX_LAUNCHER_ITEMS_PER_WORKLOAD>(
+        deserializer,
+        "a bounded launcher item array",
+    )
+}
+
+fn deserialize_workloads<'de, D>(deserializer: D) -> Result<Vec<WorkloadPublicSummary>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    deserialize_bounded_vec::<D, WorkloadPublicSummary, MAX_WORKLOADS_PER_RESPONSE>(
+        deserializer,
+        "a bounded workload summary array",
+    )
+}
+
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[non_exhaustive]
+pub struct WorkloadPublicSummary {
+    pub identity: WorkloadIdentity,
+    pub provider_kind: WorkloadProviderKind,
+    pub state: WorkloadState,
+    pub execution_posture: WorkloadExecutionPosture,
+    pub availability: WorkloadAvailability,
+    pub graphical_posture: GraphicalLaunchPosture,
+    #[serde(default)]
+    pub capabilities: CapabilitySet,
+    #[serde(default, deserialize_with = "deserialize_launcher_items")]
+    pub launcher_items: Vec<LauncherItemSummary>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_item_id: Option<ProtocolToken>,
+}
+
+impl WorkloadPublicSummary {
+    pub fn new(
+        identity: WorkloadIdentity,
+        provider_kind: WorkloadProviderKind,
+        state: WorkloadState,
+        execution_posture: WorkloadExecutionPosture,
+        availability: WorkloadAvailability,
+        graphical_posture: GraphicalLaunchPosture,
+    ) -> Self {
+        Self {
+            identity,
+            provider_kind,
+            state,
+            execution_posture,
+            availability,
+            graphical_posture,
+            capabilities: CapabilitySet::default(),
+            launcher_items: Vec::new(),
+            default_item_id: None,
+        }
+    }
+
+    pub fn with_capabilities(mut self, capabilities: CapabilitySet) -> Self {
+        self.capabilities = capabilities;
+        self
+    }
+
+    pub fn with_launcher_items(mut self, launcher_items: Vec<LauncherItemSummary>) -> Self {
+        self.launcher_items = launcher_items;
+        self
+    }
+
+    pub fn with_default_item_id(mut self, default_item_id: ProtocolToken) -> Self {
+        self.default_item_id = Some(default_item_id);
+        self
+    }
+
+    pub fn identity(&self) -> &WorkloadIdentity {
+        &self.identity
+    }
+
+    pub fn execution_posture(&self) -> &WorkloadExecutionPosture {
+        &self.execution_posture
+    }
+
+    pub const fn provider_kind(&self) -> WorkloadProviderKind {
+        self.provider_kind
+    }
+
+    pub const fn state(&self) -> WorkloadState {
+        self.state
+    }
+
+    pub const fn availability(&self) -> WorkloadAvailability {
+        self.availability
+    }
+
+    pub const fn graphical_posture(&self) -> GraphicalLaunchPosture {
+        self.graphical_posture
+    }
+
+    pub fn capabilities(&self) -> &CapabilitySet {
+        &self.capabilities
+    }
+
+    pub fn launcher_items(&self) -> &[LauncherItemSummary] {
+        &self.launcher_items
+    }
+
+    pub fn default_item_id(&self) -> Option<&ProtocolToken> {
+        self.default_item_id.as_ref()
+    }
+
+    pub fn select_launcher_item(
+        &self,
+        explicit_item: Option<&ProtocolToken>,
+    ) -> Result<&LauncherItemSummary, ToolkitError> {
+        if let Some(explicit_item) = explicit_item {
+            return self
+                .launcher_items
+                .iter()
+                .find(|item| item.id == *explicit_item)
+                .ok_or(ToolkitError::LauncherItemUnavailable);
+        }
+        if let Some(default_item) = self.default_item_id.as_ref() {
+            return self
+                .launcher_items
+                .iter()
+                .find(|item| item.id == *default_item)
+                .ok_or(ToolkitError::LauncherItemUnavailable);
+        }
+        match self.launcher_items.as_slice() {
+            [item] => Ok(item),
+            [] => Err(ToolkitError::LauncherItemUnavailable),
+            items => {
+                let candidates = items
+                    .iter()
+                    .take(MAX_LAUNCHER_ITEMS_PER_WORKLOAD)
+                    .map(|item| {
+                        LauncherItemCandidate::new(
+                            item.id.as_str().to_owned(),
+                            bounded_candidate_name(&item.name),
+                        )
+                    })
+                    .collect();
+                Err(ToolkitError::AmbiguousLauncherItems {
+                    candidates: LauncherItemCandidates::new(candidates),
+                })
+            }
+        }
+    }
+}
+
+impl fmt::Debug for WorkloadPublicSummary {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WorkloadPublicSummary")
+            .field("identity", &self.identity)
+            .field("provider_kind", &self.provider_kind)
+            .field("state", &self.state)
+            .field("execution_posture", &self.execution_posture)
+            .field("availability", &self.availability)
+            .field("graphical_posture", &self.graphical_posture)
+            .field("capabilities", &self.capabilities)
+            .field("launcher_items", &self.launcher_items)
+            .field("default_item_id", &self.default_item_id)
+            .finish()
+    }
+}
+
+fn bounded_candidate_name(value: &str) -> String {
+    let mut bounded = String::new();
+    for ch in value.chars() {
+        if ch.is_control() || bounded.len() + ch.len_utf8() > MAX_PRESENTATION_TEXT_LEN {
+            break;
+        }
+        bounded.push(ch);
+    }
+    bounded
+}
+
+fn validate_realm_filter(value: &str) -> Result<(), ToolkitError> {
+    if value.is_empty() {
+        return Err(ToolkitError::InvalidIdentity {
+            field: IdentityField::RealmPath,
+            reason: ValidationReason::Empty,
+        });
+    }
+    if value.len() > MAX_REALM_PATH_BYTES {
+        return Err(ToolkitError::InvalidIdentity {
+            field: IdentityField::RealmPath,
+            reason: ValidationReason::TooLong,
+        });
+    }
+    let labels = value.split('.').collect::<Vec<_>>();
+    if labels.is_empty()
+        || labels.len() > MAX_REALM_LABELS
+        || labels
+            .iter()
+            .any(|label| *label == "d2b" || !is_label(label))
+    {
+        return Err(ToolkitError::InvalidIdentity {
+            field: IdentityField::RealmPath,
+            reason: ValidationReason::BadShape,
+        });
+    }
+    Ok(())
+}
+
+fn deserialize_optional_realm_filter<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = Option::<String>::deserialize(deserializer)?;
+    if let Some(value) = value.as_deref() {
+        validate_realm_filter(value).map_err(serde::de::Error::custom)?;
+    }
+    Ok(value)
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct WorkloadListArgs {
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_optional_realm_filter"
+    )]
+    pub realm: Option<String>,
+}
+
+impl WorkloadListArgs {
+    pub fn new(realm: Option<String>) -> Result<Self, ToolkitError> {
+        if let Some(realm) = realm.as_deref() {
+            validate_realm_filter(realm)?;
+        }
+        Ok(Self { realm })
+    }
+
+    pub fn inventory() -> Self {
+        Self::default()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct WorkloadStatusArgs {
+    pub target: WorkloadTarget,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct LauncherExecArgs {
+    pub target: WorkloadTarget,
+    pub item_id: ProtocolToken,
+    pub operation_id: OperationId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "op", content = "args", rename_all = "camelCase")]
+pub enum WorkloadOp {
+    List(WorkloadListArgs),
+    Status(WorkloadStatusArgs),
+    LauncherExec(LauncherExecArgs),
+}
+
+impl WorkloadOp {
+    pub const fn metrics_label_value(&self) -> &'static str {
+        match self {
+            Self::List(_) => "list",
+            Self::Status(_) => "status",
+            Self::LauncherExec(_) => "launcher-exec",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "op", content = "result", rename_all = "camelCase")]
+pub enum WorkloadOpResponse {
+    List(WorkloadListResult),
+    Status(Box<WorkloadStatusResult>),
+    LauncherExec(LauncherExecResult),
+}
+
+impl WorkloadOpResponse {
+    pub const fn metrics_label_value(&self) -> &'static str {
+        match self {
+            Self::List(_) => "list",
+            Self::Status(_) => "status",
+            Self::LauncherExec(_) => "launcher-exec",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct WorkloadListResult {
+    #[serde(deserialize_with = "deserialize_workloads")]
+    pub workloads: Vec<WorkloadPublicSummary>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct WorkloadStatusResult {
+    pub workload: WorkloadPublicSummary,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LauncherExecDisposition {
+    Committed,
+    AlreadyCommitted,
+}
+
+impl LauncherExecDisposition {
+    pub const fn metrics_label_value(self) -> &'static str {
+        match self {
+            Self::Committed => "committed",
+            Self::AlreadyCommitted => "already-committed",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct LauncherExecResult {
+    pub target: WorkloadTarget,
+    pub item_id: ProtocolToken,
+    pub operation_id: OperationId,
+    pub disposition: LauncherExecDisposition,
+}
+
+pub fn validate_shell_target(value: &str) -> Result<(), ToolkitError> {
+    if value.contains('.') || value.starts_with("d2b://") {
+        WorkloadTarget::parse(value).map(|_| ())
+    } else {
+        WorkloadId::parse(value)
+            .map(|_| ())
+            .map_err(|_| ToolkitError::InvalidTarget {
+                reason: if value.len() > MAX_ID_LEN {
+                    ValidationReason::TooLong
+                } else if value.is_empty() {
+                    ValidationReason::Empty
+                } else {
+                    ValidationReason::BadShape
+                },
+            })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn canonical_target_normalizes_optional_scheme() {
+        let target = WorkloadTarget::parse("d2b://browser.work.d2b").unwrap();
+        assert_eq!(target.as_str(), "browser.work.d2b");
+        assert_eq!(target.workload().as_str(), "browser");
+        assert_eq!(target.realm().target_form(), "work");
+    }
+
+    #[test]
+    fn unknown_capabilities_round_trip_deterministically() {
+        let capabilities: CapabilitySet =
+            serde_json::from_str(r#"["future-window-mode","pty","configured-launch"]"#).unwrap();
+        assert!(capabilities.has(Capability::Pty));
+        assert_eq!(
+            capabilities
+                .unknown_iter()
+                .map(ProtocolToken::as_str)
+                .collect::<Vec<_>>(),
+            vec!["future-window-mode"]
+        );
+        assert_eq!(
+            serde_json::to_string(&capabilities).unwrap(),
+            r#"["configured-launch","future-window-mode","pty"]"#
+        );
+    }
+
+    #[test]
+    fn operation_ids_are_redacted() {
+        let operation_id = OperationId::parse("launch-123").unwrap();
+        assert_eq!(format!("{operation_id:?}"), "OperationId([redacted])");
+        assert_eq!(operation_id.to_string(), "[redacted]");
+        assert_eq!(
+            serde_json::to_string(&operation_id).unwrap(),
+            r#""launch-123""#
+        );
+    }
+
+    #[test]
+    fn bounded_decoders_reject_oversize_arrays() {
+        let capabilities = format!(
+            "[{}]",
+            std::iter::repeat(r#""exec""#)
+                .take(MAX_CAPABILITY_SET_LEN + 1)
+                .collect::<Vec<_>>()
+                .join(",")
+        );
+        assert!(serde_json::from_str::<CapabilitySet>(&capabilities).is_err());
+    }
+}

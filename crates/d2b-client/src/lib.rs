@@ -11,6 +11,7 @@ pub mod frame;
 pub mod hello;
 pub mod shell_owner;
 pub mod socket_policy;
+pub mod workload;
 
 pub use error::ClientError;
 pub use frame::{read_frame, read_json_frame, write_frame, write_json_frame, FrameBounds};

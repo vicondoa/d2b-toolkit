@@ -78,7 +78,7 @@ mod tests {
 
     #[test]
     fn shell_name_is_not_rendered_as_label() {
-        let module = shell_module(&ShellName::new("private-project-shell"));
+        let module = shell_module(&ShellName::new("private-project-shell").unwrap());
         let encoded = module.to_waybar_json().unwrap();
         assert!(!encoded.contains("private-project-shell"));
         assert!(encoded.contains("d2b-shell"));
