@@ -1,58 +1,50 @@
-# Use as a path dependency
+# Use the source distribution as path dependencies
 
-During local development, point downstream workspaces at this checkout:
+The flake output carries the facade and its exact canonical d2b source in one
+store path:
+
+```nix
+let
+  source =
+    inputs.d2b-client-toolkit.packages.${system}.d2b-client-toolkit;
+in
+{
+  toolkitRoot = "${source}/share/d2b-client-toolkit";
+}
+```
+
+Use paths below `distribution/crates/` for toolkit-owned crates and paths below
+`d2b/packages/` for canonical crates:
 
 ```toml
 [dependencies]
-d2b-client = { path = "../d2b-toolkit/crates/d2b-client" }
-d2b-toolkit-core = { path = "../d2b-toolkit/crates/d2b-toolkit-core" }
+d2b-client-toolkit = { path = "/nix/store/…/share/d2b-client-toolkit/distribution/crates/d2b-client-toolkit" }
+d2b-client = { path = "/nix/store/…/share/d2b-client-toolkit/d2b/packages/d2b-client", default-features = false }
+d2b-contracts = { path = "/nix/store/…/share/d2b-client-toolkit/d2b/packages/d2b-contracts", default-features = false, features = ["v2-services"] }
+d2b-session = { path = "/nix/store/…/share/d2b-client-toolkit/d2b/packages/d2b-session", default-features = false }
 ```
 
-Run `cargo test --workspace` in this repository before updating downstream pins.
+Build tooling should generate those concrete paths from the flake output rather
+than committing Nix store paths. When patching the facade's exact Git
+dependencies to the bundled paths, patch all four canonical packages to the
+same `d2b/` tree.
 
-## Flake input boilerplate
+## Flake input
 
-When the downstream is a Nix flake, make the toolkit follow the same `nixpkgs`
-as d2b and the desktop client:
+Keep one `nixpkgs` input:
 
 ```nix
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
-    d2b = {
-      url = "github:vicondoa/d2b";
+    d2b-client-toolkit = {
+      url = "github:vicondoa/d2b-client-toolkit";
       inputs.nixpkgs.follows = "nixpkgs";
-    };
-
-    d2b-toolkit = {
-      url = "github:vicondoa/d2b-toolkit";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
-    d2b-wlterm = {
-      url = "github:vicondoa/d2b-wlterm";
-      inputs.nixpkgs.follows = "nixpkgs";
-      inputs.d2b-toolkit.follows = "d2b-toolkit";
     };
   };
 }
 ```
 
-For local iteration, replace `github:vicondoa/d2b-toolkit` with a `path:` URL
-but keep the same `follows` lines. That keeps `nix flake check` evaluating the
-client module and toolkit source against one nixpkgs revision.
-
-## Packaged source output
-
-The default package is intentionally a source package:
-
-```nix
-toolkitSource = inputs.d2b-toolkit.packages.${system}.default;
-```
-
-Clients can point Cargo path dependencies at
-`${toolkitSource}/share/d2b-toolkit/crates/<crate>` during Nix builds. This is
-the packaging seam used by d2b desktop companions; it avoids hard-coded
-developer checkout paths while preserving ordinary Cargo path dependencies for
-local worktrees.
+For local work, replace the GitHub URL with this checkout's `path:` URL and
+retain the `follows` declaration.

@@ -1,26 +1,14 @@
-# Redaction contract
+# Redaction boundary
 
-Terminal bytes, command arguments, environment keys and values, current
-working directories, executable paths, command output, opaque handles, and
-caller operation ids must not appear in `Debug`, `Display`, logs, metrics, or
-error strings.
+Client, target, session, attachment, identity, provider, and service errors use
+their canonical d2b `Debug` and `Display` implementations. The toolkit does not
+wrap them in a wire-serializable generic redaction type.
 
-Use `Redacted<T>`, `SensitiveString`, `TerminalBytes`, and `OpaqueHandle` for
-shell-owner payloads. `OperationId` is wire-serializable but its `Debug` and
-`Display` are always redacted. Correlation errors never print expected or
-received values.
+Presentation helpers contain only UI colors, fixed CSS names, and caller-owned
+Waybar text. They must not be extended with credentials, endpoints, target
+identifiers, terminal bytes, command arguments, environment values, current
+working directories, opaque handles, or generated service messages.
 
-Workload targets, workload and launcher display names, and icon identifiers are
-presentation data and may be rendered in UI. Free-form presentation strings
-are bounded by the public frame, omitted from metadata `Debug`, and must not
-become metrics labels. Ambiguous launcher errors expose only sanitized,
-field-bounded item ids and names; they never include provider-private execution
-data.
-
-Metrics helpers return closed provider, posture, availability, state, item
-kind, disposition, or operation classes. They never return a target, workload
-id, item id, name, user id, shell name, or daemon-supplied free-form text.
-
-Public launcher summaries reject fields such as `argv`, `env`, `cwd`, `path`,
-`output`, and `session`. Daemon error messages and remediations are omitted
-from diagnostics; clients propagate only the bounded error kind.
+When a missing redaction primitive is required by more than one consumer, add
+it to the canonical d2b owner first and consume it through the pinned source.
+Do not create a serialized sibling DTO.
