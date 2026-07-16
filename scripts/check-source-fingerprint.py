@@ -10,22 +10,22 @@ import sys
 import tomllib
 
 
-SOURCE_REVISION = "9183b45c6505cfd496e5d537bf6376f884fb16c7"
+SOURCE_REVISION = "7e94327951d30913a1a6e0e7a47d4a24b462deff"
 SOURCE_REPOSITORY = "https://github.com/vicondoa/d2b"
-INVENTORY_REVISION = "b1f2c13a196004f5a0fb999808d691b0668cf226"
-INVENTORY_SHA256 = "a582fccdc9c048efaa5cc1a9cd6ceb26381d9a965dc0cb0165952c4e61151c92"
+INVENTORY_REVISION = "d5a913922eb019ed83a16e4e64f562303b31ecf7"
+INVENTORY_SHA256 = "71e783b9c8f98b3ac62a067bbe68da944b5758193b0d7cf0d7886fce29ef00cb"
 DISTRIBUTION_ID = "d2b-client-toolkit"
 DISTRIBUTION_FINGERPRINT = (
-    "6f63e19042fb60bc2626e566321f5cf73574ed03caf6971de0c4c739f3ed5dd6"
+    "0401d1f463d9dad49efd663d1493184e42954f624a029fbfd41c49f0323e5708"
 )
 SOURCE_GROUPS = {
     "workspace-manifest": "5bdcccc3f279bb763208c0afdd4e6cd9de04417744343ba261c0d5888994b6af",
-    "contracts-v2": "3fb32344f16050f481c2883383e40515e60285d6ea57280eab99dbe053bd793c",
+    "contracts-package": "480f29794edabf36c4c6fbc6feeee7fd17e0a716bbf9022b4a4ef4ca8eea4af4",
     "session-runtime": "375fbf89c82ee939cc12f15cad9847fcfac5876219bbd6555ea7f2f7f990aa70",
     "unix-session": "80cf8908ae8182b8597e36cbd7a9a57f61c51a2f6ba65495ed5ca44007ce98d4",
     "client": "fce5dcafee09c40bb963f34cc00c1fb96c446ba68750f21c778975acc371f89a",
     "public-contract-artifacts": (
-        "628d9caf75e21f35ef54f93ca2486622604144b2d3c4417e1477f4f91d7036ad"
+        "c3a37248d7376827409d897eac7a1b30dcd39f3187261cf4098b6dbcc577459b"
     ),
 }
 CANONICAL_PACKAGES = (

@@ -18,7 +18,8 @@ All notable changes to this project will be documented in this file.
 - Renamed the crate, package, flake output, source package, share path, and
   current documentation surface to `d2b-client-toolkit` 2.0.0.
 - Pinned canonical client sources to d2b revision
-  `9183b45c6505cfd496e5d537bf6376f884fb16c7`.
+  `7e94327951d30913a1a6e0e7a47d4a24b462deff` and the complete package-level
+  source inventory.
 
 ### Removed
 

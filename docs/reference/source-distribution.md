@@ -1,13 +1,13 @@
 # Source distribution contract
 
 The canonical source pin is
-`9183b45c6505cfd496e5d537bf6376f884fb16c7` from
+`7e94327951d30913a1a6e0e7a47d4a24b462deff` from
 `https://github.com/vicondoa/d2b`. The client distribution fingerprint is
-`6f63e19042fb60bc2626e566321f5cf73574ed03caf6971de0c4c739f3ed5dd6`.
+`0401d1f463d9dad49efd663d1493184e42954f624a029fbfd41c49f0323e5708`.
 
 [`toolkit-source-contract.json`](./toolkit-source-contract.json) is the exact
 source/ownership inventory frozen at d2b inventory revision
-`b1f2c13a196004f5a0fb999808d691b0668cf226`.
+`d5a913922eb019ed83a16e4e64f562303b31ecf7`.
 [`source-pin.json`](./source-pin.json) binds this repository to the canonical
 revision, distribution fingerprint, and inventory digest.
 

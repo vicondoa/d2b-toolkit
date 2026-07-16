@@ -15,9 +15,9 @@ pub use d2b_session as session;
 pub use d2b_session_unix as unix_session;
 pub use tokio_adapter::{TokioAdapterError, TokioClientAdapter, TokioClientTask};
 
-pub const D2B_SOURCE_REVISION: &str = "9183b45c6505cfd496e5d537bf6376f884fb16c7";
+pub const D2B_SOURCE_REVISION: &str = "7e94327951d30913a1a6e0e7a47d4a24b462deff";
 pub const D2B_SOURCE_FINGERPRINT: &str =
-    "6f63e19042fb60bc2626e566321f5cf73574ed03caf6971de0c4c739f3ed5dd6";
+    "0401d1f463d9dad49efd663d1493184e42954f624a029fbfd41c49f0323e5708";
 
 #[cfg(test)]
 mod tests {
