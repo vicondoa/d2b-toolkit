@@ -4,7 +4,7 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     d2b-src = {
-      url = "github:vicondoa/d2b/7e94327951d30913a1a6e0e7a47d4a24b462deff";
+      url = "github:vicondoa/d2b/4018d9c9652bd826c2e6a9abccdcdcafb832d944";
       flake = false;
     };
   };
@@ -47,8 +47,8 @@
             '';
 
             passthru = {
-              canonicalRevision = "7e94327951d30913a1a6e0e7a47d4a24b462deff";
-              sourceFingerprint = "0401d1f463d9dad49efd663d1493184e42954f624a029fbfd41c49f0323e5708";
+              canonicalRevision = "4018d9c9652bd826c2e6a9abccdcdcafb832d944";
+              sourceFingerprint = "c2c99bdd77ba66948fce81161dcc3efde608eefefb96f28fa934c9f58d96d838";
             };
           };
         in
@@ -62,7 +62,7 @@
           pname = "d2b-client-toolkit-workspace-check";
           inherit version;
           src = pkgs.lib.cleanSource self;
-          cargoHash = "sha256-5TsjfjOh0dsyMsjNYw3wlWSDyDnpbC+MdV6yw8Xc3bw=";
+          cargoHash = "sha256-sKtH2ABCpeC1jIAW9yMyXSLEwqSoUW7Lqgp5LIxSWh8=";
           cargoBuildFlags = [ "--workspace" "--all-features" ];
           cargoTestFlags = [ "--workspace" "--all-features" ];
           nativeBuildInputs = [ pkgs.python3 ];

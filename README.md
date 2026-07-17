@@ -6,8 +6,8 @@ APIs are the canonical non-publishable crates from
 [`vicondoa/d2b`](https://github.com/vicondoa/d2b).
 
 The distribution is pinned to d2b revision
-`7e94327951d30913a1a6e0e7a47d4a24b462deff` and source fingerprint
-`0401d1f463d9dad49efd663d1493184e42954f624a029fbfd41c49f0323e5708`.
+`4018d9c9652bd826c2e6a9abccdcdcafb832d944` and source fingerprint
+`c2c99bdd77ba66948fce81161dcc3efde608eefefb96f28fa934c9f58d96d838`.
 CI verifies every file in the upstream client distribution inventory.
 
 ## Crates

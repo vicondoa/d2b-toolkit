@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "canonicalRepository": "https://github.com/vicondoa/d2b",
-  "sourceRevision": "7e94327951d30913a1a6e0e7a47d4a24b462deff",
-  "inventoryRevision": "d5a913922eb019ed83a16e4e64f562303b31ecf7",
+  "sourceRevision": "4018d9c9652bd826c2e6a9abccdcdcafb832d944",
+  "inventoryRevision": "c645a769f50b8283c1eddeb12f2a9bf0a1f397bd",
   "distributionId": "d2b-client-toolkit",
-  "distributionFingerprint": "0401d1f463d9dad49efd663d1493184e42954f624a029fbfd41c49f0323e5708",
-  "inventorySha256": "71e783b9c8f98b3ac62a067bbe68da944b5758193b0d7cf0d7886fce29ef00cb"
+  "distributionFingerprint": "c2c99bdd77ba66948fce81161dcc3efde608eefefb96f28fa934c9f58d96d838",
+  "inventorySha256": "2aaef697cc53abc8757a3593352cd5bd1d3f0d3f2031c6a2967f92afa5e74d97"
 }
