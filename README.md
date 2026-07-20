@@ -6,8 +6,8 @@ APIs are the canonical non-publishable crates from
 [`vicondoa/d2b`](https://github.com/vicondoa/d2b).
 
 The distribution is pinned to d2b revision
-`4018d9c9652bd826c2e6a9abccdcdcafb832d944` and source fingerprint
-`c2c99bdd77ba66948fce81161dcc3efde608eefefb96f28fa934c9f58d96d838`.
+`9dc902243cdd7aba7ef269988b96f0aae6e037da` and source fingerprint
+`5a20cef3a64281df819eeb76bdfe385999755479b467b559653011582fb9c043`.
 CI verifies every file in the upstream client distribution inventory.
 
 ## Crates
@@ -55,12 +55,14 @@ source artifact. See
 
 Canonical client operations are Tokio-compatible. `TokioClientAdapter` makes
 the selected runtime handle explicit when a desktop application uses another
-executor for its UI. It does not discover an endpoint, synthesize a route, or
-translate an older protocol.
+executor for its UI. The re-exported client now includes the canonical typed
+daemon/guest clients and generated user, shell, notification, and Wayland
+service clients.
 
-Live endpoint/route examples remain intentionally absent until the owning
-control-service API is content-frozen. An authenticated Wayland control helper
-is likewise not implemented until the user/desktop service API is frozen.
+The toolkit does not discover an endpoint, synthesize credentials or a route,
+or translate an older protocol. Live acquisition and integrated desktop
+behavior remain fail closed until the canonical runtime supplies them; no
+direct-compositor or unauthenticated fallback is provided.
 
 ## Development
 

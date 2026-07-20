@@ -11,8 +11,8 @@ repository = "https://github.com/vicondoa/d2b-client-toolkit"
 
 [workspace.metadata.d2b-source]
 repository = "https://github.com/vicondoa/d2b"
-revision = "4018d9c9652bd826c2e6a9abccdcdcafb832d944"
-distribution-fingerprint = "c2c99bdd77ba66948fce81161dcc3efde608eefefb96f28fa934c9f58d96d838"
+revision = "9dc902243cdd7aba7ef269988b96f0aae6e037da"
+distribution-fingerprint = "5a20cef3a64281df819eeb76bdfe385999755479b467b559653011582fb9c043"
 
 [workspace.lints.clippy]
 all = "warn"
@@ -21,10 +21,10 @@ all = "warn"
 unsafe_code = "forbid"
 
 [workspace.dependencies]
-d2b-client = { git = "https://github.com/vicondoa/d2b", rev = "4018d9c9652bd826c2e6a9abccdcdcafb832d944", default-features = false }
-d2b-contracts = { git = "https://github.com/vicondoa/d2b", rev = "4018d9c9652bd826c2e6a9abccdcdcafb832d944", default-features = false, features = ["v2-services"] }
-d2b-session = { git = "https://github.com/vicondoa/d2b", rev = "4018d9c9652bd826c2e6a9abccdcdcafb832d944", default-features = false }
-d2b-session-unix = { git = "https://github.com/vicondoa/d2b", rev = "4018d9c9652bd826c2e6a9abccdcdcafb832d944", default-features = false }
+d2b-client = { git = "https://github.com/vicondoa/d2b", rev = "9dc902243cdd7aba7ef269988b96f0aae6e037da", default-features = false }
+d2b-contracts = { git = "https://github.com/vicondoa/d2b", rev = "9dc902243cdd7aba7ef269988b96f0aae6e037da", default-features = false, features = ["v2-services"] }
+d2b-session = { git = "https://github.com/vicondoa/d2b", rev = "9dc902243cdd7aba7ef269988b96f0aae6e037da", default-features = false }
+d2b-session-unix = { git = "https://github.com/vicondoa/d2b", rev = "9dc902243cdd7aba7ef269988b96f0aae6e037da", default-features = false }
 d2b-client-toolkit-colors = { path = "crates/d2b-client-toolkit-colors" }
 d2b-client-toolkit-waybar = { path = "crates/d2b-client-toolkit-waybar" }
 serde = { version = "1", features = ["derive"] }

@@ -19,7 +19,7 @@ target, session, or Wayland-service wire types.
 ## Wayland control
 
 This distribution does not own `d2b-wayland-proxy` and does not expose an
-authenticated Wayland control helper. That integration remains unavailable
-until the canonical user/desktop service contract is frozen. Consumers must
-not substitute direct compositor access or an unauthenticated compatibility
-path.
+authenticated Wayland control helper. The canonical generated service client is
+available through `d2b-client-toolkit`; live endpoint acquisition and integrated
+proxy behavior remain outside this presentation crate. Consumers must not
+substitute direct compositor access or an unauthenticated compatibility path.

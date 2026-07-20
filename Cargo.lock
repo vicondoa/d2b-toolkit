@@ -302,13 +302,15 @@ dependencies = [
 [[package]]
 name = "d2b-client"
 version = "2.0.0"
-source = "git+https://github.com/vicondoa/d2b?rev=4018d9c9652bd826c2e6a9abccdcdcafb832d944#4018d9c9652bd826c2e6a9abccdcdcafb832d944"
+source = "git+https://github.com/vicondoa/d2b?rev=9dc902243cdd7aba7ef269988b96f0aae6e037da#9dc902243cdd7aba7ef269988b96f0aae6e037da"
 dependencies = [
  "async-trait",
  "d2b-contracts",
  "d2b-session",
  "d2b-session-unix",
+ "nix 0.29.0",
  "protobuf",
+ "sha2",
  "tokio",
  "ttrpc",
 ]
@@ -347,7 +349,7 @@ dependencies = [
 [[package]]
 name = "d2b-contracts"
 version = "2.0.0"
-source = "git+https://github.com/vicondoa/d2b?rev=4018d9c9652bd826c2e6a9abccdcdcafb832d944#4018d9c9652bd826c2e6a9abccdcdcafb832d944"
+source = "git+https://github.com/vicondoa/d2b?rev=9dc902243cdd7aba7ef269988b96f0aae6e037da#9dc902243cdd7aba7ef269988b96f0aae6e037da"
 dependencies = [
  "async-trait",
  "protobuf",
@@ -355,15 +357,17 @@ dependencies = [
  "serde",
  "sha2",
  "ttrpc",
+ "zeroize",
 ]
 
 [[package]]
 name = "d2b-session"
 version = "2.0.0"
-source = "git+https://github.com/vicondoa/d2b?rev=4018d9c9652bd826c2e6a9abccdcdcafb832d944#4018d9c9652bd826c2e6a9abccdcdcafb832d944"
+source = "git+https://github.com/vicondoa/d2b?rev=9dc902243cdd7aba7ef269988b96f0aae6e037da#9dc902243cdd7aba7ef269988b96f0aae6e037da"
 dependencies = [
  "async-trait",
  "d2b-contracts",
+ "futures-util",
  "protobuf",
  "sha2",
  "snow",
@@ -374,11 +378,12 @@ dependencies = [
 [[package]]
 name = "d2b-session-unix"
 version = "2.0.0"
-source = "git+https://github.com/vicondoa/d2b?rev=4018d9c9652bd826c2e6a9abccdcdcafb832d944#4018d9c9652bd826c2e6a9abccdcdcafb832d944"
+source = "git+https://github.com/vicondoa/d2b?rev=9dc902243cdd7aba7ef269988b96f0aae6e037da#9dc902243cdd7aba7ef269988b96f0aae6e037da"
 dependencies = [
  "async-trait",
  "d2b-contracts",
  "d2b-session",
+ "libc",
  "rustix 0.38.44",
  "tokio",
 ]
@@ -692,6 +697,19 @@ dependencies = [
  "libc",
  "memoffset 0.7.1",
  "pin-utils",
+]
+
+[[package]]
+name = "nix"
+version = "0.29.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "71e2746dc3a24dd78b3cfcb7be93368c6de9963d30f43a6a73998a9cf4b17b46"
+dependencies = [
+ "bitflags 2.13.1",
+ "cfg-if",
+ "cfg_aliases",
+ "libc",
+ "memoffset 0.9.1",
 ]
 
 [[package]]

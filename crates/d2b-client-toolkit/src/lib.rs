@@ -15,9 +15,9 @@ pub use d2b_session as session;
 pub use d2b_session_unix as unix_session;
 pub use tokio_adapter::{TokioAdapterError, TokioClientAdapter, TokioClientTask};
 
-pub const D2B_SOURCE_REVISION: &str = "4018d9c9652bd826c2e6a9abccdcdcafb832d944";
+pub const D2B_SOURCE_REVISION: &str = "9dc902243cdd7aba7ef269988b96f0aae6e037da";
 pub const D2B_SOURCE_FINGERPRINT: &str =
-    "c2c99bdd77ba66948fce81161dcc3efde608eefefb96f28fa934c9f58d96d838";
+    "5a20cef3a64281df819eeb76bdfe385999755479b467b559653011582fb9c043";
 
 #[cfg(test)]
 mod tests {
@@ -44,5 +44,31 @@ mod tests {
     fn source_pin_is_full_and_exact() {
         assert_eq!(D2B_SOURCE_REVISION.len(), 40);
         assert_eq!(D2B_SOURCE_FINGERPRINT.len(), 64);
+    }
+
+    #[test]
+    fn exposes_content_frozen_service_clients() {
+        assert_eq!(
+            TypeId::of::<DaemonClient>(),
+            TypeId::of::<d2b_client::DaemonClient>()
+        );
+        assert_eq!(
+            TypeId::of::<GuestClient>(),
+            TypeId::of::<d2b_client::GuestClient>()
+        );
+        assert!(matches!(
+            ServiceKind::Daemon,
+            d2b_client::ServiceKind::Daemon
+        ));
+        assert!(matches!(ServiceKind::User, d2b_client::ServiceKind::User));
+        assert!(matches!(ServiceKind::Shell, d2b_client::ServiceKind::Shell));
+        assert!(matches!(
+            ServiceKind::Notify,
+            d2b_client::ServiceKind::Notify
+        ));
+        assert!(matches!(
+            ServiceKind::Wayland,
+            d2b_client::ServiceKind::Wayland
+        ));
     }
 }

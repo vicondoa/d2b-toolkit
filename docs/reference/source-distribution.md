@@ -1,22 +1,21 @@
 # Source distribution contract
 
 The canonical source pin is
-`4018d9c9652bd826c2e6a9abccdcdcafb832d944` from
+`9dc902243cdd7aba7ef269988b96f0aae6e037da` from
 `https://github.com/vicondoa/d2b`. The client distribution fingerprint is
-`c2c99bdd77ba66948fce81161dcc3efde608eefefb96f28fa934c9f58d96d838`.
+`5a20cef3a64281df819eeb76bdfe385999755479b467b559653011582fb9c043`.
 
 [`toolkit-source-contract.json`](./toolkit-source-contract.json) is the exact
-source/ownership inventory frozen at d2b inventory revision
-`c645a769f50b8283c1eddeb12f2a9bf0a1f397bd`.
+source/ownership inventory frozen at d2b revision
+`9dc902243cdd7aba7ef269988b96f0aae6e037da`.
 [`source-pin.json`](./source-pin.json) binds this repository to the canonical
 revision, distribution fingerprint, and inventory digest.
 
-The W9 inventory added its own source-contract reference and updated the
-foundation-crate reference after the W4 code freeze. Those two byte-exact,
-non-wire supplements live under `canonical-source-artifacts/`; all Rust,
-protobuf, generated binding, manifest, test, schema, vector, and other
-reference bytes come directly from the exact W4 source revision. The drift
-gate permits no other overlay path.
+The inventory carries updated source-contract and foundation-crate references as
+two byte-exact, non-wire supplements under `canonical-source-artifacts/`. All
+Rust, protobuf, generated binding, manifest, test, schema, vector, and other
+reference bytes come directly from the exact canonical revision. The drift gate
+permits no other overlay path.
 
 For each selected source group, the drift gate verifies every file SHA-256 and
 then hashes the sorted paths and bytes with the inventory's domain-separated,
@@ -42,5 +41,5 @@ Without either, the script resolves the already-fetched Cargo Git checkout in
 offline mode.
 
 Release archives contain `distribution/`, including the two audited reference
-supplements, and the exact W4 `d2b/` tree. They do not include d2b's lockfile as
-this repository's lockfile; each distribution owns its dependency resolution.
+supplements, and the exact pinned `d2b/` tree. They do not include d2b's lockfile
+as this repository's lockfile; each distribution owns its dependency resolution.

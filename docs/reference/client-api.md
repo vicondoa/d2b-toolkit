@@ -5,7 +5,7 @@ client foundation.
 
 | Path | Canonical owner | Contents |
 | --- | --- | --- |
-| crate root and `client` | `d2b-client` | typed targets, services, client calls, retry/cancellation, attachments, and named streams |
+| crate root and `client` | `d2b-client` | typed targets, daemon/guest and generated service clients, terminal streams, retry/cancellation, attachments, and named streams |
 | `contracts` | `d2b-contracts` | v2 identities, ComponentSession records, provider/state records, and generated service bindings |
 | `session` | `d2b-session` | authenticated session runtime, owned transports, packets, and streams |
 | `unix_session` | `d2b-session-unix` | Linux socket and descriptor substrate; available only with `host-socket` |
@@ -34,13 +34,23 @@ The adapter schedules canonical client futures only. It does not select or
 open an endpoint, construct credentials, acquire a route, or convert between
 wire formats.
 
+## Canonical service clients
+
+`DaemonClient` exposes the content-frozen daemon inspection, lifecycle, and
+terminal operations. `GuestClient` exposes proxied guest inspection,
+cancellation, and retained-log operations. `ServiceKind` and `GeneratedClient`
+include the content-frozen user, runtime, shell, clipboard, notification,
+security-key, Wayland, activation, and TTY services. These are direct canonical
+re-exports with their canonical validation and redaction.
+
 ## Deferred integrations
 
-Live daemon endpoint and route examples are unavailable until the
-control-service API is content-frozen. Persistent shell, notification, desktop
-action, and authenticated Wayland examples additionally depend on the
-user/desktop service API. This distribution intentionally provides no
-placeholder implementation or fallback.
+The local connector requires a caller-supplied exact route, authenticated
+endpoint policy, credentials, and owned transport. Live endpoint, credential,
+and route acquisition remain unavailable until the integrated runtime owns that
+state. Persistent-shell, notification, desktop-action, and authenticated
+Wayland helpers likewise remain absent; the toolkit provides no guessed
+placeholder, direct-compositor path, or unauthenticated fallback.
 
 Canonical API details and generated contracts are in the bundled
 `share/d2b-client-toolkit/d2b/docs/reference/` tree.

@@ -17,9 +17,10 @@ boundary and submit client futures through an explicit Tokio handle. The
 toolkit does not add a futures-I/O compatibility protocol or a second transport
 implementation.
 
-The current canonical foundation accepts an already-owned route, endpoint
-policy, credentials, and transport. Endpoint discovery and route acquisition
-belong to the control-service API and are not guessed here.
+The canonical client now distributes the content-frozen daemon, guest, and
+user/desktop service clients. Its local connector still accepts an already-owned
+route, endpoint policy, credentials, and transport. Live acquisition and
+integrated routing are runtime behavior and are not guessed here.
 
 ## Presentation boundary
 
@@ -27,6 +28,6 @@ Color parsing and Waybar JSON are local presentation models. They do not carry
 service requests, session records, credentials, target identifiers, terminal
 bytes, or opaque handles.
 
-Authenticated Wayland control belongs to the user/desktop service API. The
-former ancillary-FD helper was removed so this distribution does not collide
-with or bypass the canonical `d2b-wayland-proxy`.
+Authenticated Wayland contracts come from the canonical user/desktop service
+API. The former ancillary-FD helper remains removed so this distribution does
+not collide with or bypass the canonical `d2b-wayland-proxy`.

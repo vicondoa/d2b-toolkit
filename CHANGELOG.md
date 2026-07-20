@@ -18,16 +18,19 @@ All notable changes to this project will be documented in this file.
 - Renamed the crate, package, flake output, source package, share path, and
   current documentation surface to `d2b-client-toolkit` 2.0.0.
 - Pinned canonical client sources to d2b revision
-  `4018d9c9652bd826c2e6a9abccdcdcafb832d944` and the complete package-level
+  `9dc902243cdd7aba7ef269988b96f0aae6e037da` and the complete package-level
   source inventory.
+- Distributed the canonical typed daemon/guest clients, terminal streams, and
+  generated user/desktop service clients while retaining their Tokio and
+  redaction behavior.
 
 ### Removed
 
 - Removed copied public framing, hello negotiation, errors, shell/workload
   DTOs, protocol fixtures, and the repository-local client implementation.
 - Removed the colliding Wayland proxy crate and all old protocol aliases and
-  fallbacks. Authenticated Wayland control and live endpoint/route examples
-  remain unavailable until their canonical service contracts are frozen.
+  fallbacks. Live endpoint/credential acquisition and integrated authenticated
+  Wayland behavior remain unavailable without a canonical runtime owner.
 
 ### Security
 

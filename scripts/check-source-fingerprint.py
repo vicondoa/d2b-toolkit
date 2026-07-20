@@ -10,22 +10,22 @@ import sys
 import tomllib
 
 
-SOURCE_REVISION = "4018d9c9652bd826c2e6a9abccdcdcafb832d944"
+SOURCE_REVISION = "9dc902243cdd7aba7ef269988b96f0aae6e037da"
 SOURCE_REPOSITORY = "https://github.com/vicondoa/d2b"
-INVENTORY_REVISION = "c645a769f50b8283c1eddeb12f2a9bf0a1f397bd"
-INVENTORY_SHA256 = "2aaef697cc53abc8757a3593352cd5bd1d3f0d3f2031c6a2967f92afa5e74d97"
+INVENTORY_REVISION = "9dc902243cdd7aba7ef269988b96f0aae6e037da"
+INVENTORY_SHA256 = "35c33c2e23e1b9f03b5abc3bbca2d3320e38c42dfc7aceb7e3476d28210cde8c"
 DISTRIBUTION_ID = "d2b-client-toolkit"
 DISTRIBUTION_FINGERPRINT = (
-    "c2c99bdd77ba66948fce81161dcc3efde608eefefb96f28fa934c9f58d96d838"
+    "5a20cef3a64281df819eeb76bdfe385999755479b467b559653011582fb9c043"
 )
 SOURCE_GROUPS = {
-    "workspace-manifest": "5bdcccc3f279bb763208c0afdd4e6cd9de04417744343ba261c0d5888994b6af",
-    "contracts-package": "480f29794edabf36c4c6fbc6feeee7fd17e0a716bbf9022b4a4ef4ca8eea4af4",
-    "session-runtime": "375fbf89c82ee939cc12f15cad9847fcfac5876219bbd6555ea7f2f7f990aa70",
-    "unix-session": "80cf8908ae8182b8597e36cbd7a9a57f61c51a2f6ba65495ed5ca44007ce98d4",
-    "client": "fce5dcafee09c40bb963f34cc00c1fb96c446ba68750f21c778975acc371f89a",
+    "workspace-manifest": "7cff164deff5b221f775ecc8e7e75a73c1e2e8e2ff863bfe9dde3250dbc35b5a",
+    "contracts-package": "f9fe0276b02f27e172684d266b7d5e0c182f0d3fa960d98d9a7a4083f42fe471",
+    "session-runtime": "f732a64c9944e040b69b95ed3c92e28847febd9ab34bfe13fec1da3aba523a39",
+    "unix-session": "58afc178aa2fb742a78cac702c02e9178e523c1d645ed9c7e65b0944a2891b8c",
+    "client": "8dfdfdda74a920d6d26c01fd5c014ff4f6cf5e3b4aa7520185efaccfc087f57e",
     "public-contract-artifacts": (
-        "d421154a2ecfbde33561f9d0efc1aa7da2d1fe6acf5f039deda3a24545662646"
+        "5a5a7818e9133d6097cb2d0488e212bbbab9a0bc74b40bf519ae6c4e4d1dcafb"
     ),
 }
 CANONICAL_PACKAGES = (
@@ -209,7 +209,7 @@ def verify_distribution_ownership(repository: Path) -> None:
 def verify_inventory(repository: Path, source: Path) -> None:
     inventory_path = repository / "docs/reference/toolkit-source-contract.json"
     if sha256_file(inventory_path) != INVENTORY_SHA256:
-        fail("the exact W9 toolkit source inventory changed")
+        fail("the canonical toolkit source inventory changed")
     inventory = json.loads(inventory_path.read_text())
     policy = inventory["fingerprintPolicy"]
     if policy != {
