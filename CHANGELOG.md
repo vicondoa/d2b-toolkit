@@ -37,6 +37,13 @@ All notable changes to this project will be documented in this file.
 - Kept protocol and session authority in the canonical d2b crates and made
   source drift fail closed across Cargo, Nix, and release packaging.
 
+### Fixed
+
+- Scoped the CI workflow's `push` trigger to `main` so a feature-branch pull
+  request head publishes exactly one `rust` and one `nix` check instead of
+  duplicate checks from separate push and pull-request runs, while
+  `main`-branch push CI is unaffected.
+
 ## [0.2.0] - 2026-07-11
 
 ### Added
