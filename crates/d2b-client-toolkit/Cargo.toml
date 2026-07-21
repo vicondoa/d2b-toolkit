@@ -1,0 +1,27 @@
+[package]
+name = "d2b-client-toolkit"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Canonical d2b client distribution facade and Tokio runtime boundary"
+publish = false
+
+[features]
+default = []
+host-socket = ["d2b-client/host-socket", "dep:d2b-session-unix"]
+
+[lints]
+workspace = true
+
+[dependencies]
+d2b-client.workspace = true
+d2b-contracts.workspace = true
+d2b-session.workspace = true
+d2b-session-unix = { workspace = true, optional = true }
+thiserror.workspace = true
+tokio = { workspace = true, features = ["rt"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }
