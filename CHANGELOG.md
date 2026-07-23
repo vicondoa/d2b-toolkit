@@ -4,45 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Added
-
-- Added the `d2b-client-toolkit` facade with direct canonical `d2b-client`,
-  `d2b-contracts`, `d2b-session`, and optional `d2b-session-unix` re-exports.
-- Added an explicit Tokio runtime adapter, an exact canonical source inventory
-  and fingerprint gate, and release archives containing one immutable d2b
-  source tree.
-- Added renamed presentation-only color and Waybar helper crates.
-
-### Changed
-
-- Renamed the crate, package, flake output, source package, share path, and
-  current documentation surface to `d2b-client-toolkit` 2.0.0.
-- Pinned canonical client sources to d2b revision
-  `9dc902243cdd7aba7ef269988b96f0aae6e037da` and the complete package-level
-  source inventory.
-- Distributed the canonical typed daemon/guest clients, terminal streams, and
-  generated user/desktop service clients while retaining their Tokio and
-  redaction behavior.
-
-### Removed
-
-- Removed copied public framing, hello negotiation, errors, shell/workload
-  DTOs, protocol fixtures, and the repository-local client implementation.
-- Removed the colliding Wayland proxy crate and all old protocol aliases and
-  fallbacks. Live endpoint/credential acquisition and integrated authenticated
-  Wayland behavior remain unavailable without a canonical runtime owner.
-
-### Security
-
-- Kept protocol and session authority in the canonical d2b crates and made
-  source drift fail closed across Cargo, Nix, and release packaging.
-
 ### Fixed
 
-- Scoped the CI workflow's `push` trigger to `main` so a feature-branch pull
-  request head publishes exactly one `rust` and one `nix` check instead of
-  duplicate checks from separate push and pull-request runs, while
-  `main`-branch push CI is unaffected.
+- Rejected inconsistent workload identity targets, wrapped the shared shell and
+  workload correlation sequence without returning zero, and aligned free-form
+  presentation decoding with the daemon's frame-bounded wire contract.
+- Made additive workload response metadata non-exhaustive while providing
+  constructors, builders, and accessors for downstream clients.
 
 ## [0.2.0] - 2026-07-11
 

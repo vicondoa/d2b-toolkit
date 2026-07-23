@@ -1,79 +1,71 @@
-# d2b-client-toolkit
+# d2b-toolkit
 
-GitHub/flake source distribution for d2b desktop clients. Version 2.0.0 is a
-clean break from the former public-JSON toolkit: client, contract, and session
-APIs are the canonical non-publishable crates from
-[`vicondoa/d2b`](https://github.com/vicondoa/d2b).
-
-The distribution is pinned to d2b revision
-`9dc902243cdd7aba7ef269988b96f0aae6e037da` and source fingerprint
-`5a20cef3a64281df819eeb76bdfe385999755479b467b559653011582fb9c043`.
-CI verifies every file in the upstream client distribution inventory.
+Shared Rust/Nix toolkit crates for d2b desktop integrations. Version 0.2.0
+provides the public protocol-v3 workload, launcher, posture, and persistent
+shell contracts used by desktop clients.
 
 ## Crates
 
-- `d2b-client-toolkit` re-exports `d2b-client`, `d2b-contracts`, and
-  `d2b-session` without wrapping their types. Its `host-socket` feature also
-  re-exports `d2b-session-unix`.
-- `d2b-client-toolkit-colors` parses presentation-only UI color artifacts and
-  emits the stable CSS color names.
-- `d2b-client-toolkit-waybar` serializes generic Waybar presentation models.
+- `d2b-toolkit-core`: bounded public workload, capability, launcher, shell,
+  hello, redaction, and socket-classification DTOs.
+- `d2b-client`: feature-aware, runtime-agnostic public-socket workload and
+  shell helpers over `futures::io::{AsyncRead, AsyncWrite}`.
+- `d2b-wayland-core`: safe Wayland client metadata DTOs and UI color types.
+- `d2b-wayland-colors`: d2b UI color artifact parsing, fallback reporting, and CSS variable helpers.
+- `d2b-wayland-waybar`: Waybar custom-module serialization helpers.
+- `d2b-wayland-proxy`: Unix-only ancillary FD transport trait seams for proxy integrations.
 
-All crates are `publish = false`. Releases are source archives and flake
-outputs, not crates.io packages.
+## Development
+
+```bash
+cargo fmt --all -- --check
+cargo test --workspace
+nix flake check
+```
 
 ## Flake usage
 
-Use one `nixpkgs` revision across the consumer and toolkit:
+Downstream desktop clients should share the consumer host's `nixpkgs` input and
+use the packaged source output when building from flakes:
 
 ```nix
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
-    d2b-client-toolkit = {
-      url = "github:vicondoa/d2b-client-toolkit";
+    d2b-toolkit = {
+      url = "github:vicondoa/d2b-toolkit";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 }
 ```
 
-`packages.${system}.d2b-client-toolkit` (also `default`) contains:
+`packages.${system}.default` is a source package containing `Cargo.toml`,
+`Cargo.lock`, `crates/`, `README.md`, and `docs/`. Sibling clients such as
+`d2b-wlterm`, `d2b-wlcontrol`, and WeezTerm use it to rewrite local Cargo path
+dependencies in Nix builds without vendoring another toolkit copy.
 
-```text
-share/d2b-client-toolkit/
-├── distribution/  # facade and presentation crates, docs, and lockfile
-└── d2b/            # exact canonical d2b source
-```
+The client crate does not open sockets directly. Runtime integrations pass a
+concrete futures async-I/O transport connected only to the public daemon
+socket. Toolkit clients never connect to the privileged broker or the private
+unsafe-local helper.
 
-This lets Nix builds rewrite dependencies to ordinary paths in one immutable
-source artifact. See
-[`docs/how-to/use-as-path-dependency.md`](docs/how-to/use-as-path-dependency.md).
+Workload launch is reference-only: callers provide a canonical target, item id,
+and stable operation id. Public DTOs contain no argv, environment, cwd,
+executable path, uid, output, or helper message. Unknown capability tokens are
+preserved for forward compatibility.
 
-## Runtime boundary
+`unsafe-local` is explicitly **not isolated**. It runs as the authenticated host
+user and must not be presented as equivalent to `local-vm` or a
+provider-managed boundary. Workload methods require
+`configured-launch-v1` and `unsafe-local-provider-v1`; unsafe-local shell
+clients additionally opt into `unsafe-local-shell-v1`.
 
-Canonical client operations are Tokio-compatible. `TokioClientAdapter` makes
-the selected runtime handle explicit when a desktop application uses another
-executor for its UI. The re-exported client now includes the canonical typed
-daemon/guest clients and generated user, shell, notification, and Wayland
-service clients.
+The reusable `d2b-public-workload-v3-fixtures-v1` conformance contract is under
+`crates/d2b-toolkit-core/tests/fixtures/public-workload-v3-v1/`. See
+[`docs/reference/client-protocol.md`](docs/reference/client-protocol.md) for
+frame shapes, version-skew behavior, and launcher selection.
 
-The toolkit does not discover an endpoint, synthesize credentials or a route,
-or translate an older protocol. Live acquisition and integrated desktop
-behavior remain fail closed until the canonical runtime supplies them; no
-direct-compositor or unauthenticated fallback is provided.
-
-## Development
-
-```bash
-cargo fmt --all -- --check
-cargo build --workspace --all-features --locked
-cargo clippy --workspace --all-features --all-targets --locked -- -D warnings
-cargo test --workspace --all-features --locked
-python3 scripts/check-source-fingerprint.py
-nix flake check
-```
-
-The fingerprint command uses `D2B_CANONICAL_SOURCE` when set; otherwise it
-locates the exact Cargo Git checkout without network access.
+Wayland FD passing stays isolated in `d2b-wayland-proxy`; shared client crates
+model only safe metadata and presentation data.

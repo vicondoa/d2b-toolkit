@@ -3,31 +3,23 @@ members = ["crates/*"]
 resolver = "2"
 
 [workspace.package]
-version = "2.0.0"
-edition = "2024"
-rust-version = "1.94.1"
+edition = "2021"
+rust-version = "1.76"
 license = "Apache-2.0"
-repository = "https://github.com/vicondoa/d2b-client-toolkit"
-
-[workspace.metadata.d2b-source]
-repository = "https://github.com/vicondoa/d2b"
-revision = "9dc902243cdd7aba7ef269988b96f0aae6e037da"
-distribution-fingerprint = "5a20cef3a64281df819eeb76bdfe385999755479b467b559653011582fb9c043"
-
-[workspace.lints.clippy]
-all = "warn"
+repository = "https://github.com/vicondoa/d2b-toolkit"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
 
 [workspace.dependencies]
-d2b-client = { git = "https://github.com/vicondoa/d2b", rev = "9dc902243cdd7aba7ef269988b96f0aae6e037da", default-features = false }
-d2b-contracts = { git = "https://github.com/vicondoa/d2b", rev = "9dc902243cdd7aba7ef269988b96f0aae6e037da", default-features = false, features = ["v2-services"] }
-d2b-session = { git = "https://github.com/vicondoa/d2b", rev = "9dc902243cdd7aba7ef269988b96f0aae6e037da", default-features = false }
-d2b-session-unix = { git = "https://github.com/vicondoa/d2b", rev = "9dc902243cdd7aba7ef269988b96f0aae6e037da", default-features = false }
-d2b-client-toolkit-colors = { path = "crates/d2b-client-toolkit-colors" }
-d2b-client-toolkit-waybar = { path = "crates/d2b-client-toolkit-waybar" }
+d2b-toolkit-core = { path = "crates/d2b-toolkit-core" }
+d2b-client = { path = "crates/d2b-client" }
+d2b-wayland-core = { path = "crates/d2b-wayland-core" }
+d2b-wayland-colors = { path = "crates/d2b-wayland-colors" }
+d2b-wayland-proxy = { path = "crates/d2b-wayland-proxy" }
+d2b-wayland-waybar = { path = "crates/d2b-wayland-waybar" }
+futures = "0.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-thiserror = "2"
-tokio = { version = "1", default-features = false }
+sha2 = "0.10"
+thiserror = "1"

@@ -1,22 +1,5 @@
 {
   "nodes": {
-    "d2b-src": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1784543637,
-        "narHash": "sha256-mDNv+gkV0GKOFDWJEunuR76mPIwQsSg9AJcxsI5qhMQ=",
-        "owner": "vicondoa",
-        "repo": "d2b",
-        "rev": "9dc902243cdd7aba7ef269988b96f0aae6e037da",
-        "type": "github"
-      },
-      "original": {
-        "owner": "vicondoa",
-        "repo": "d2b",
-        "rev": "9dc902243cdd7aba7ef269988b96f0aae6e037da",
-        "type": "github"
-      }
-    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1783224372,
@@ -35,7 +18,6 @@
     },
     "root": {
       "inputs": {
-        "d2b-src": "d2b-src",
         "nixpkgs": "nixpkgs"
       }
     }
